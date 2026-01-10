@@ -27,8 +27,8 @@ export default function App() {
   const [team, setTeam] = useState<any[]>([]); 
   const [patientData, setPatientData] = useState<any>(null);
   
-  // ניהול ועריכה (התוספת החדשה!)
-  const [editingPatient, setEditingPatient] = useState<any>(null); // מי בטיפול כרגע
+  // משתני עריכה וניהול
+  const [editingPatient, setEditingPatient] = useState<any>(null);
   const [newMember, setNewMember] = useState<any>({ name: '', role: '', phone: '' });
   const [formData, setFormData] = useState<any>({ name: '', personalId: '', city: '', patientPhone: '', emergencyPhone: '', story: '' });
   const [braceletId, setBraceletId] = useState('');
@@ -45,31 +45,58 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const bid = params.get('bid');
     
+    // בדיקה אם קיים מזהה צמיד בכתובת האתר
     if (!bid) { 
       setScreen('ADMIN_LOGIN'); 
       return; 
     }
     
     setBraceletId(bid);
-    const q = query(collection(db, "patients"), where("braceletId", "==", bid));
-    const snap = await getDocs(q);
-    
-    if (!snap.empty) {
-      setPatientData(snap.docs[0].data());
-      setScreen('EMERGENCY');
-      // דיווח מיקום
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition((pos) => {
-          addDoc(collection(db, "scans"), { bid, lat: pos.coords.latitude, lng: pos.coords.longitude, time: serverTimestamp() });
-        });
+
+    try {
+      // חיפוש המטופל לפי ה-ID של הצמיד
+      const q = query(collection(db, "patients"), where("braceletId", "==", bid));
+      const snap = await getDocs(q);
+      
+      if (!snap.empty) {
+        setPatientData(snap.docs[0].data());
+        setScreen('EMERGENCY');
+
+        // לוגיקת המעקב המעודכנת
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              // הצלחה בקבלת מיקום
+              addDoc(collection(db, "scans"), { 
+                bid, 
+                lat: pos.coords.latitude, 
+                lng: pos.coords.longitude, 
+                userAgent: navigator.userAgent,
+                status: "success",
+                time: serverTimestamp() 
+              });
+            },
+            (error) => {
+              // המשתמש סירב לשתף מיקום או תקלה ב-GPS
+              addDoc(collection(db, "scans"), { 
+                bid, 
+                status: "denied_or_error",
+                userAgent: navigator.userAgent,
+                time: serverTimestamp() 
+              });
+            }
+          );
+        }
+      } else { 
+        // צמיד חדש שטרם נרשם
+        setScreen('REGISTER'); 
       }
-    } else { 
-      setScreen('REGISTER'); 
+    } catch (err) {
+      console.error("Startup Error:", err);
     }
   };
 
-  // --- פונקציות ניהול (החלק החדש והחשוב) ---
-  
+  // --- לוגיקת מנהל ---
   const handleLogin = () => {
     if (pinInput === '2430' || pinInput === '015875339') {
       setIsUnlocked(true);
@@ -78,39 +105,35 @@ export default function App() {
   };
 
   const loadAdminData = async () => {
-    const pSnap = await getDocs(collection(db, "patients"));
-    // כאן הקסם: אנחנו שומרים גם את ה-ID כדי שנוכל למחוק אח"כ
-    setPatients(pSnap.docs.map(d => ({...d.data(), id: d.id}))); 
-    
-    const tSnap = await getDocs(collection(db, "staff"));
-    setTeam(tSnap.docs.map(d => ({...d.data(), id: d.id})));
+    try {
+      const pSnap = await getDocs(collection(db, "patients"));
+      setPatients(pSnap.docs.map(d => ({...d.data(), id: d.id})));
+      
+      const tSnap = await getDocs(collection(db, "staff"));
+      setTeam(tSnap.docs.map(d => ({...d.data(), id: d.id})));
 
-    const sSnap = await getDocs(query(collection(db, "scans"), orderBy("time", "desc"), limit(5)));
-    setScans(sSnap.docs.map(d => d.data()));
-  };
-
-  // מחיקת מטופל
-  const handleDeletePatient = async (id: string, name: string) => {
-    // eslint-disable-next-line no-restricted-globals
-    if (confirm(`האם אתה בטוח שברצונך למחוק את ${name}?`)) {
-      await deleteDoc(doc(db, "patients", id));
-      loadAdminData(); // רענון הטבלה
+      const sSnap = await getDocs(query(collection(db, "scans"), orderBy("time", "desc"), limit(5)));
+      setScans(sSnap.docs.map(d => d.data()));
+    } catch (err) {
+      console.error("Error loading admin data:", err);
     }
   };
 
-  // שמירת עריכה
+  const handleDeletePatient = async (id: string, name: string) => {
+    if (window.confirm(`האם למחוק את ${name}?`)) {
+      await deleteDoc(doc(db, "patients", id));
+      loadAdminData();
+    }
+  };
+
   const handleUpdatePatient = async () => {
     if (!editingPatient) return;
-    try {
-      const docRef = doc(db, "patients", editingPatient.id);
-      const { id, ...dataToUpdate } = editingPatient; // מנקים את ה-ID לפני השליחה
-      await updateDoc(docRef, dataToUpdate);
-      setEditingPatient(null); // סוגרים את החלונית
-      loadAdminData(); // מרעננים
-      alert("הפרטים עודכנו בהצלחה");
-    } catch (e) {
-      alert("שגיאה בעדכון");
-    }
+    const docRef = doc(db, "patients", editingPatient.id);
+    const { id, ...dataToUpdate } = editingPatient;
+    await updateDoc(docRef, dataToUpdate);
+    setEditingPatient(null);
+    loadAdminData();
+    alert("עודכן בהצלחה");
   };
 
   const addTeamMember = async () => {
@@ -128,26 +151,24 @@ export default function App() {
   const runAiAnalysis = () => {
     setLoadingAi(true);
     setTimeout(() => {
-      setAiAnalysis(`🔍 דוח AI: זוהה ריכוז חריג של ${patients.length} מבוטחים.`);
+      setAiAnalysis(`🔍 דוח AI: זוהה ריכוז של ${patients.length} מבוטחים.`);
       setLoadingAi(false);
     }, 1500);
   };
 
   const exportToExcel = () => {
-    // פונקציית ייצוא בסיסית
     const rows = patients.map(p => `${p.name},${p.personalId},${p.city}`);
     const csvContent = "data:text/csv;charset=utf-8," + "Name,ID,City\n" + rows.join("\n");
     const encodedUri = encodeURI(csvContent);
     window.open(encodedUri);
   };
 
-  // --- תצוגה ---
+  // --- ניהול תצוגות (Screens) ---
 
   if (screen === 'SPLASH') return (
     <div style={centerS}><h1 style={{fontSize:'3.5rem', color:'#1a73e8'}}>re-co</h1><p>RECOGNITION LIVE</p></div>
   );
 
-  // --- דשבורד מנהל (עם עריכה ומחיקה) ---
   if (screen === 'ADMIN_LOGIN' && isUnlocked) return (
     <div style={{ direction: 'rtl', padding: '20px', backgroundColor: '#f4f7f9', minHeight: '100vh', fontFamily: 'system-ui' }}>
       <header style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'30px'}}>
@@ -161,7 +182,6 @@ export default function App() {
       {aiAnalysis && <div style={aiBoxStyle}>{aiAnalysis}</div>}
 
       <div style={{display:'flex', gap:'20px', flexWrap:'wrap'}}>
-        {/* טבלת מבוטחים */}
         <div style={{...cardS, flex:2, margin:0, maxWidth:'none'}}>
           <h3 style={{color:'#555'}}>📋 מאגר מבוטחים ({patients.length})</h3>
           <table style={{width:'100%', textAlign:'right', borderCollapse:'collapse'}}>
@@ -173,7 +193,6 @@ export default function App() {
                   <td>{p.personalId}</td>
                   <td>{p.patientPhone}</td>
                   <td>
-                    {/* כפתורי הפעולה החדשים */}
                     <button onClick={() => setEditingPatient(p)} style={editBtnS}>✏️</button>
                     <button onClick={() => handleDeletePatient(p.id, p.name)} style={delBtnS}>🗑️</button>
                   </td>
@@ -183,7 +202,6 @@ export default function App() {
           </table>
         </div>
 
-        {/* צוות */}
         <div style={{...cardS, flex:1, margin:0, maxWidth:'none', backgroundColor:'#f8fbff'}}>
           <h3 style={{color:'#1a73e8'}}>צוות</h3>
           <div style={{display:'flex', gap:'5px', marginBottom:'10px'}}>
@@ -200,20 +218,16 @@ export default function App() {
         </div>
       </div>
 
-      {/* חלונית עריכה (Popup) - החלק שהיה חסר קודם */}
       {editingPatient && (
         <div style={overlayS}>
           <div style={modalS}>
-            <h3 style={{marginTop:0}}>עריכת {editingPatient.name}</h3>
-            <label style={{display:'block', marginBottom:'5px'}}>שם מלא:</label>
+            <h3>עריכת {editingPatient.name}</h3>
+            <label style={{display:'block', marginTop:'10px'}}>שם מלא:</label>
             <input style={inputS} value={editingPatient.name} onChange={e => setEditingPatient({...editingPatient, name: e.target.value})} />
-            
-            <label style={{display:'block', marginBottom:'5px'}}>עיר:</label>
+            <label style={{display:'block', marginTop:'10px'}}>עיר מגורים:</label>
             <input style={inputS} value={editingPatient.city} onChange={e => setEditingPatient({...editingPatient, city: e.target.value})} />
-            
-            <label style={{display:'block', marginBottom:'5px'}}>טלפון חירום:</label>
+            <label style={{display:'block', marginTop:'10px'}}>טלפון חירום:</label>
             <input style={inputS} value={editingPatient.emergencyPhone} onChange={e => setEditingPatient({...editingPatient, emergencyPhone: e.target.value})} />
-            
             <div style={{display:'flex', gap:'10px', marginTop:'20px'}}>
               <button onClick={handleUpdatePatient} style={btnS}>שמור שינויים</button>
               <button onClick={() => setEditingPatient(null)} style={{...btnS, backgroundColor:'#999'}}>ביטול</button>
@@ -224,7 +238,6 @@ export default function App() {
     </div>
   );
 
-  // --- מסך כניסה למנהל ---
   if (screen === 'ADMIN_LOGIN') return (
     <div style={centerS}>
       <div style={cardS}>
@@ -235,7 +248,6 @@ export default function App() {
     </div>
   );
 
-  // --- מסך רישום ---
   if (screen === 'REGISTER') return (
     <div style={{ padding: '20px', direction: 'rtl', textAlign: 'center' }}>
       <h1 style={{color:'#1a73e8'}}>re-co</h1>
@@ -252,7 +264,6 @@ export default function App() {
     </div>
   );
 
-  // --- מסך חירום ---
   return (
     <div style={{ padding: '20px', direction: 'rtl', textAlign: 'center' }}>
       <h1 style={{color:'#1a73e8'}}>re-co</h1>
@@ -268,7 +279,7 @@ export default function App() {
   );
 }
 
-// --- סגנונות (Styles) - הכל כאן, שום דבר לא יחסר ---
+// --- סגנונות (CSS) ---
 const centerS: React.CSSProperties = { height:'100vh', display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center', backgroundColor:'#f0f4f8' };
 const cardS: React.CSSProperties = { backgroundColor:'#fff', padding:'25px', borderRadius:'20px', boxShadow:'0 10px 25px rgba(0,0,0,0.05)', maxWidth:'500px', margin:'0 auto' };
 const inputS: React.CSSProperties = { display:'block', width:'100%', padding:'12px', margin:'10px 0', borderRadius:'10px', border:'1px solid #ccc', boxSizing:'border-box' };
@@ -276,8 +287,6 @@ const btnS: React.CSSProperties = { width:'100%', padding:'15px', backgroundColo
 const excelBtnS: React.CSSProperties = { padding:'12px 20px', backgroundColor:'#22c55e', color:'white', borderRadius:'12px', border:'none', fontWeight:'bold', cursor:'pointer' };
 const aiBtnS: React.CSSProperties = { padding:'12px 20px', backgroundColor:'#7c4dff', color:'white', borderRadius:'12px', border:'none', fontWeight:'bold', cursor:'pointer' };
 const aiBoxStyle: React.CSSProperties = { backgroundColor:'#f3e5f5', padding:'20px', borderRadius:'15px', borderRight:'6px solid #7c4dff', marginBottom:'20px', whiteSpace:'pre-line', textAlign:'right' };
-const statCardS: React.CSSProperties = { flex:1, backgroundColor:'#fff', padding:'20px', borderRadius:'20px', textAlign:'center', boxShadow:'0 4px 10px rgba(0,0,0,0.05)' };
-const statNumS: React.CSSProperties = { fontSize:'2.5rem', fontWeight:'bold', color:'#1a73e8', margin:0 };
 const protocolS: React.CSSProperties = { backgroundColor:'#000', color:'#fff', padding:'15px', borderRadius:'10px', marginBottom:'15px' };
 const callBtnS: React.CSSProperties = { display:'block', padding:'20px', backgroundColor:'red', color:'white', borderRadius:'15px', textDecoration:'none', fontWeight:'bold', fontSize:'1.4rem', marginBottom:'15px' };
 const storyS: React.CSSProperties = { backgroundColor:'#fffde7', padding:'15px', borderRadius:'10px', borderRight:'5px solid #fbc02d', textAlign:'right' };
