@@ -1,12 +1,12 @@
 // src/pages/AdminPanel.tsx
-import React, { useState, seEffect } from 'react';
+import React, { useState } from 'react';
 import { collection, query, getDocs, orderBy, limit, deleteDoc, doc, updateDoc } from "firebase/firestore";
-import { db } from '../services/firebase'; // שים לב לנקודותיים (../) כי עלינו תיקייה אחת למעלה
+import { db } from '../services/firebase'; // שים לב לחיבור הנכון לקובץ השירות
 
 export default function AdminPanel() {
   // --- STATE ---
   const [isUnlocked, setIsUnlocked] = useState(false);
-  const [pinInput, setPinInput] = useState('');
+  const [pinInput, setPinInput] = useState(''); // המשתנה ששומר את הקוד
   const [patients, setPatients] = useState<any[]>([]);
   const [scans, setScans] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,6 +29,7 @@ export default function AdminPanel() {
       loadAdminData();
     } else { 
       alert("קוד שגוי"); 
+      setPinInput(''); // איפוס השדה במקרה של טעות
     }
   };
 
@@ -48,10 +49,10 @@ export default function AdminPanel() {
     if (!editingPatient) return;
     try {
       const docRef = doc(db, "patients", editingPatient.id);
-      const { id, ...dataToUpdate } = editingPatient; // מוציאים את ה-ID מהמידע שנשלח לעדכון
+      const { id, ...dataToUpdate } = editingPatient;
       await updateDoc(docRef, dataToUpdate);
       setEditingPatient(null);
-      loadAdminData(); // רענון הנתונים
+      loadAdminData();
       alert("הפרטים עודכנו בהצלחה");
     } catch (e) {
       console.error("Update error:", e);
@@ -75,12 +76,15 @@ export default function AdminPanel() {
     <div style={centerS}>
       <div style={cardS}>
         <h2>כניסת ניהול</h2>
+        {/* כאן התיקון לבעיית ההקלדה */}
         <input 
-          type="password" 
+          type="password"
+          autoFocus={true}     // פוקוס אוטומטי
+          value={pinInput}     // חיבור למשתנה
           style={inputS} 
           placeholder="קוד גישה" 
-          onChange={e=>setPinInput(e.target.value)} 
-          onKeyPress={e=>e.key==='Enter'&&handleLogin()} 
+          onChange={(e) => setPinInput(e.target.value)} // עדכון המשתנה
+          onKeyPress={(e) => e.key === 'Enter' && handleLogin()} 
         />
         <button onClick={handleLogin} style={btnS}>כניסה</button>
       </div>
@@ -162,16 +166,12 @@ export default function AdminPanel() {
             <div style={{maxHeight:'60vh', overflowY:'auto', padding:'5px'}}>
               <label style={labelS}>שם מלא:</label>
               <input style={inputS} value={editingPatient.name} onChange={e=>setEditingPatient({...editingPatient, name: e.target.value})} />
-              
               <label style={labelS}>תעודת זהות:</label>
               <input style={inputS} value={editingPatient.personalId || ""} onChange={e=>setEditingPatient({...editingPatient, personalId: e.target.value})} />
-              
               <label style={labelS}>טלפון אישי:</label>
               <input style={inputS} value={editingPatient.patientPhone || ""} onChange={e=>setEditingPatient({...editingPatient, patientPhone: e.target.value})} />
-              
               <label style={labelS}>טלפון חירום:</label>
               <input style={inputS} value={editingPatient.emergencyPhone || ""} onChange={e=>setEditingPatient({...editingPatient, emergencyPhone: e.target.value})} />
-              
               <label style={labelS}>רקע רפואי:</label>
               <textarea style={{...inputS, height:120}} value={editingPatient.story || ""} onChange={e=>setEditingPatient({...editingPatient, story: e.target.value})} />
             </div>
@@ -186,10 +186,10 @@ export default function AdminPanel() {
   );
 }
 
-// --- סגנונות (הועתקו לכאן כדי שהדף יעבוד עצמאית) ---
+// --- סגנונות ---
 const searchInpS: React.CSSProperties = { padding:'10px 15px', borderRadius:'25px', border:'1px solid #ddd', width:'300px', outline:'none' };
 const cardS: React.CSSProperties = { backgroundColor:'#fff', padding:'25px', borderRadius:'20px', boxShadow:'0 10px 25px rgba(0,0,0,0.05)', maxWidth:'500px', margin:'0 auto' };
-const inputS: React.CSSProperties = { display:'block', width:'100%', padding:'12px', margin:'10px 0', borderRadius:'10px', border:'1px solid #ccc', boxSizing:'border-box' };
+const inputS: React.CSSProperties = { display:'block', width:'100%', padding:'12px', margin:'10px 0', borderRadius:'10px', border:'1px solid #ccc', boxSizing:'border-box', position:'relative', zIndex:10, backgroundColor:'white' };
 const btnS: React.CSSProperties = { width:'100%', padding:'15px', backgroundColor:'#1a73e8', color:'#fff', border:'none', borderRadius:'10px', fontWeight:'bold', cursor:'pointer' };
 const editBtnS: React.CSSProperties = { background:'#e3f2fd', border:'none', cursor:'pointer', padding:'8px 12px', borderRadius:'8px', color:'#1a73e8', fontWeight:'bold' };
 const delBtnS: React.CSSProperties = { background:'none', border:'none', cursor:'pointer', fontSize:'1.2rem', marginRight:'10px' };

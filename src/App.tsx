@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, addDoc, serverTimestamp } from "fire
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from './services/firebase';
 
-// ייבוא הדף החדש שיצרנו
+// --- התיקון: הייבוא כעת מפנה לתיקייה הנכונה ---
 import AdminPanel from './pages/AdminPanel';
 
 export default function App() {
@@ -11,7 +11,7 @@ export default function App() {
   const [screen, setScreen] = useState('SPLASH');
   const [patientData, setPatientData] = useState<any>(null);
   
-  // משתנים להרשמה
+  // משתנים להרשמה (עדיין כאן זמנית, עד שנעביר גם אותם)
   const [braceletId, setBraceletId] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -69,7 +69,7 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  // --- פונקציית הרשמה ---
+  // --- פונקציית הרשמה (נעביר אותה בהמשך) ---
   const handleRegister = async () => {
     if (!formData.name || !formData.personalId) return alert("חובה למלא שם ותעודת זהות");
     setIsUploading(true);
@@ -99,7 +99,7 @@ export default function App() {
 
   // --- ניתוב מסכים (Routing) ---
   
-  // 1. מסך ניהול (משתמש בקומפוננטה החדשה!)
+  // 1. מסך ניהול (מיובא מהקובץ החיצוני)
   if (screen === 'ADMIN') {
     return <AdminPanel />;
   }
@@ -107,7 +107,7 @@ export default function App() {
   // 2. מסך פתיחה
   if (screen === 'SPLASH') return <div style={centerS}><h1 style={{fontSize:'3.5rem', color:'#1a73e8'}}>re-co</h1><p>RECOGNITION LIVE</p></div>;
 
-  // 3. מסך הרשמה
+  // 3. מסך הרשמה (עדיין כאן)
   if (screen === 'REGISTER') return (
     <div style={{padding:'20px', direction:'rtl', textAlign:'center'}}>
       <h1 style={{color:'#1a73e8'}}>רישום re-co</h1>
@@ -131,7 +131,7 @@ export default function App() {
     </div>
   );
 
-  // 4. מסך חירום
+  // 4. מסך חירום (עדיין כאן)
   if (screen === 'EMERGENCY') return (
     <div style={{padding:'20px', direction:'rtl', textAlign:'center'}}>
       <h1 style={{color:'#1a73e8'}}>re-co</h1>

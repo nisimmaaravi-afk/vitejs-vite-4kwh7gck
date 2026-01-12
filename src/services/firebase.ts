@@ -1,4 +1,3 @@
-// src/services/firebase.ts
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
@@ -16,6 +15,6 @@ const firebaseConfig = {
 // אתחול האפליקציה ושירותים
 const app = initializeApp(firebaseConfig);
 
-// אנחנו מייצאים (export) את המשתנים האלו כדי שנוכל להשתמש בהם בקבצים אחרים
+// ייצוא המשתנים לשימוש בקבצים אחרים
 export const db = getFirestore(app);
 export const storage = getStorage(app);
