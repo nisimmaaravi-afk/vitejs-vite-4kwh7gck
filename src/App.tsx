@@ -16,6 +16,7 @@ export default function App() {
       const params = new URLSearchParams(window.location.search);
       const bid = params.get('bid');
       
+      // אם אין מספר צמיד בכתובת -> עבור למסך ניהול
       if (!bid) { 
         setScreen('ADMIN'); 
         return; 
@@ -31,29 +32,20 @@ export default function App() {
           setPatientData(snap.docs[0].data());
           setScreen('EMERGENCY');
           
-          // --- תיקון: בקשת מיקום בדיוק גבוה (High Accuracy) ---
+          // דיווח מיקום במצב חירום
           if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
               (pos) => {
-                // הצלחה - שולח מיקום מדויק
                 addDoc(collection(db, "scans"), { 
                   bid, 
                   lat: pos.coords.latitude, 
                   lng: pos.coords.longitude, 
                   time: serverTimestamp(),
-                  accuracy: pos.coords.accuracy // שומרים גם את רמת הדיוק למקרה שנרצה לבדוק
+                  accuracy: pos.coords.accuracy
                 });
               },
-              (err) => {
-                console.error("GPS Error:", err);
-                // במקרה של שגיאה במיקום, נרשום את הסריקה בלי מיקום
-                addDoc(collection(db, "scans"), { bid, time: serverTimestamp(), error: "GPS failed" });
-              },
-              {
-                enableHighAccuracy: true, // זה הטריגר שמפעיל GPS לווייני
-                timeout: 10000,           // מחכה עד 10 שניות לקליטה טובה
-                maximumAge: 0             // לא משתמש במיקום ישן מהזיכרון
-              }
+              (err) => console.error("GPS Error:", err),
+              { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
           }
         } else { 
@@ -68,12 +60,12 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
+  // ניתוב למסכים
   if (screen === 'ADMIN') return <AdminPanel />;
-
   if (screen === 'REGISTER') return <Register braceletId={braceletId} />;
-
   if (screen === 'EMERGENCY') return <Emergency patientData={patientData} />;
 
+  // מסך טעינה (ספלאש)
   return (
     <div style={{height:'100vh', display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center', backgroundColor:'#f0f4f8', fontFamily:'system-ui'}}>
       <h1 style={{fontSize:'3.5rem', color:'#1a73e8'}}>re-co</h1>
