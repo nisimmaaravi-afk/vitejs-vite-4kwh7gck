@@ -1,7 +1,8 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
-// הגדרות החיבור שלך (מהתמונה ששלחת)
+// הגדרות החיבור האמיתיות שלך
 const firebaseConfig = {
   apiKey: "AIzaSyARlYiBAULEaOAObakGerEGsIHSo8M6t9o",
   authDomain: "recognition-live.firebaseapp.com",
@@ -12,6 +13,9 @@ const firebaseConfig = {
   measurementId: "G-5VWKMPD20K"
 };
 
-// אתחול האפליקציה והדאטה-בייס
+// אתחול האפליקציה
 const app = initializeApp(firebaseConfig);
+
+// ייצוא השירותים לשימוש בשאר הקבצים
 export const db = getFirestore(app);
+export const auth = getAuth(app);
