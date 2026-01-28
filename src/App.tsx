@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './services/firebase';
 
@@ -9,24 +9,23 @@ import Emergency from './pages/Emergency';
 import Register from './pages/Register';
 
 function App() {
-  const [searchParams] = useSearchParams();
-  const bid = searchParams.get('bid'); 
-  
+  // שינוי קריטי: אנחנו קוראים את הכתובת ישירות מהדפדפן, לא דרך הראוטר
+  // זה מבטיח שאף אחד לא יפספס את ה-bid
+  const queryParams = new URLSearchParams(window.location.search);
+  const bid = queryParams.get('bid'); 
+
   const [isValidTag, setIsValidTag] = useState<boolean | null>(null);
 
   useEffect(() => {
     async function checkTag() {
-      // אם אין מספר, אל תעשה כלום
       if (!bid) return;
 
       try {
-        // שים לב: בודק באוסף users
         const docRef = doc(db, "users", bid);
         const docSnap = await getDoc(docRef);
         setIsValidTag(docSnap.exists());
       } catch (error) {
         console.error("Error verifying tag:", error);
-        // במקרה של שגיאה, נניח שצריך להירשם (Safety Fallback)
         setIsValidTag(false);
       }
     }
@@ -34,15 +33,15 @@ function App() {
   }, [bid]);
 
   // ============================================
-  // מחסום ברזל: אם יש מספר צמיד - טפל רק בו!
+  // מחסום ברזל: אם יש bid בשורת הכתובת - המערכת נעולה עליו
   // ============================================
   if (bid) {
-    // 1. שלב טעינה (מציג מסך לבן נקי עם טעינה)
+    // 1. שלב טעינה
     if (isValidTag === null) {
       return (
         <div style={{height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', fontFamily: 'sans-serif'}}>
           <div style={{fontSize: '40px', marginBottom: '20px'}}>🛡️</div>
-          <h3>מאמת צמיד...</h3>
+          <h3>מאמת צמיד... ({bid})</h3>
         </div>
       );
     }
@@ -52,7 +51,7 @@ function App() {
   }
 
   // ============================================
-  // רק אם אין צמיד - תציג את הראוטר הרגיל
+  // רק אם ה-bid ריק לגמרי - תציג את המנהל
   // ============================================
   return (
     <Routes>
