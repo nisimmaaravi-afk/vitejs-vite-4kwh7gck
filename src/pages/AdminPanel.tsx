@@ -2,11 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
 import { collection, getDocs, deleteDoc, doc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
-import { logAction } from '../services/logger';
+// import { logAction } from '../services/logger'; // אם אין לך קובץ logger, שים את זה בהערה
 import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// הגדרת טיפוסים (Types) למניעת שגיאות
+// פונקציית עזר ללוגים (במקום הקובץ החיצוני שאולי חסר)
+const logAction = async (user: string, action: string, details: string) => {
+  console.log(`[LOG] ${user}: ${action} - ${details}`);
+};
+
 interface Patient {
   id: string;
   fullName: string;
@@ -18,8 +22,12 @@ interface Patient {
 
 const AdminPanel: React.FC = () => {
   const navigate = useNavigate();
-  const currentUser = sessionStorage.getItem('currentUser');
-  const accessLevel = sessionStorage.getItem('accessLevel');
+  
+  // --- התיקון: חיבור למנגנון הלוגין החדש ---
+  const isAdmin = sessionStorage.getItem('isAdmin');
+  const accessLevel = sessionStorage.getItem('userRole');
+  const currentUser = isAdmin ? (accessLevel === 'master' ? 'Master Admin' : 'Admin') : null;
+  // ------------------------------------------
 
   // State
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -41,34 +49,41 @@ const AdminPanel: React.FC = () => {
   };
 
   useEffect(() => {
-    if (!currentUser) {
-      navigate('/login');
+    // אם אין כרטיס כניסה - זורק ללוגין
+    if (!isAdmin) {
+      navigate('/');
     } else {
       fetchData();
       const interval = setInterval(fetchData, 30000);
       return () => clearInterval(interval);
     }
-  }, [currentUser, navigate]);
+  }, [isAdmin, navigate]);
 
   const fetchData = async () => {
     try {
-      const patSnap = await getDocs(collection(db, 'patients'));
+      const patSnap = await getDocs(collection(db, 'patients')); // וודא ששם האוסף ב-DB הוא users או patients
       const patList = patSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
       setPatients(patList);
 
-      const q = query(collection(db, 'system_logs'), orderBy('timestamp', 'desc'), limit(100));
-      const logSnap = await getDocs(q);
-      const logList = logSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setLogs(logList);
+      // ניסיון לטעון לוגים (אם קיים אוסף כזה)
+      try {
+        const q = query(collection(db, 'system_logs'), orderBy('timestamp', 'desc'), limit(100));
+        const logSnap = await getDocs(q);
+        const logList = logSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setLogs(logList);
+        
+        const scansOnly = logList.filter((l:any) => l.action === 'SCAN' || l.action === 'SCAN_FAIL');
+        setScanFeed(scansOnly);
+        
+        setStats({
+            today: scansOnly.filter((l:any) => safeIsToday(l.timestamp)).length,
+            week: scansOnly.length,
+            month: patList.length 
+        });
+      } catch (e) {
+          console.log("No logs collection found yet");
+      }
 
-      const scansOnly = logList.filter((l:any) => l.action === 'SCAN' || l.action === 'SCAN_FAIL');
-      setScanFeed(scansOnly);
-
-      setStats({
-        today: scansOnly.filter((l:any) => safeIsToday(l.timestamp)).length,
-        week: scansOnly.length,
-        month: patList.length 
-      });
     } catch (error) {
       console.error("Error loading data:", error);
     }
@@ -114,7 +129,7 @@ const AdminPanel: React.FC = () => {
   const handleDelete = async (docId: string) => {
     if (accessLevel !== 'master') return alert('⛔ רק Master Admin מורשה למחוק');
     if (window.confirm('למחוק לצמיתות?')) {
-      await deleteDoc(doc(db, 'patients', docId));
+      await deleteDoc(doc(db, 'patients', docId)); // שים לב: אם האוסף שלך הוא users שנה ל-users
       await logAction(currentUser || 'Admin', 'DELETE', `מחיקת מבוטח ID: ${docId}`);
       fetchData();
     }
@@ -162,7 +177,7 @@ const AdminPanel: React.FC = () => {
     fontSize: '18px'
   };
 
-  if (!currentUser) return null;
+  if (!isAdmin) return null;
 
   return (
     <div style={{ padding: '20px', direction: 'rtl', fontFamily: 'Segoe UI, Arial', backgroundColor: '#f3f4f6', minHeight: '100vh' }}>
@@ -175,8 +190,8 @@ const AdminPanel: React.FC = () => {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           {accessLevel === 'master' && (<button onClick={() => alert('יומן מלא בקרוב')} style={{ background: 'white', border: '1px solid #ccc', padding: '8px 15px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>📜 יומן מערכת</button>)}
-          <div style={{ textAlign: 'left' }}><span style={{ display: 'block', fontWeight: 'bold', color: '#1f2937', fontSize: '16px' }}>{accessLevel === 'master' ? 'Master Admin' : currentUser}</span></div>
-          <button onClick={() => { sessionStorage.clear(); navigate('/login'); }} style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold' }}>יציאה ➜</button>
+          <div style={{ textAlign: 'left' }}><span style={{ display: 'block', fontWeight: 'bold', color: '#1f2937', fontSize: '16px' }}>{currentUser}</span></div>
+          <button onClick={() => { sessionStorage.clear(); navigate('/'); }} style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold' }}>יציאה ➜</button>
         </div>
       </div>
 
@@ -196,7 +211,8 @@ const AdminPanel: React.FC = () => {
         <div style={{ backgroundColor: 'white', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', height: '500px', overflowY: 'auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #f3f4f6', paddingBottom: '15px', marginBottom: '15px' }}>
              <h3 style={{ margin: 0 }}>👥 מבוטחים ({patients.length})</h3>
-             <button onClick={() => navigate('/register')} style={{ background: '#0d6efd', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>➕ הוסף מבוטח</button>
+             {/* כפתור הוספה הוסר כי הרישום הוא רק דרך הצמיד, או שתשאיר אותו אם יש צורך */}
+             {/* <button onClick={() => navigate('/register')} ... >➕ הוסף מבוטח</button> */}
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -216,7 +232,7 @@ const AdminPanel: React.FC = () => {
                     )}
                     <button onClick={() => startEdit(p)} style={{ ...btnIconStyle, background: 'white', color: '#555' }} title="ערוך">✏️</button>
                   </td>
-                  <td style={{ padding: '10px' }}><span style={{ padding: '5px 12px', borderRadius: '20px', backgroundColor: '#e3f2fd', color: '#1976d2', fontSize: '12px', fontWeight: 'bold' }}>{p.district}</span></td>
+                  <td style={{ padding: '10px' }}><span style={{ padding: '5px 12px', borderRadius: '20px', backgroundColor: '#e3f2fd', color: '#1976d2', fontSize: '12px', fontWeight: 'bold' }}>{p.district || 'כללי'}</span></td>
                   <td style={{ padding: '10px', fontWeight: 'bold', fontSize: '15px', color: '#333' }}>{p.fullName || '---'}</td>
                   <td style={{ padding: '10px', color: '#666' }}>{p.personalPhone}</td>
                 </tr>
@@ -227,9 +243,9 @@ const AdminPanel: React.FC = () => {
 
         {/* פיד סריקות */}
         <div style={{ backgroundColor: 'white', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', height: '500px', overflowY: 'auto' }}>
-          <h3 style={{ marginTop: 0, borderBottom: '2px solid #f3f4f6', paddingBottom: '15px' }}>📡 סריקות</h3>
+          <h3 style={{ marginTop: 0, borderBottom: '2px solid #f3f4f6', paddingBottom: '15px' }}>📡 סריקות אחרונות</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            {scanFeed.length === 0 ? (<p style={{color: '#999', textAlign: 'center'}}>אין סריקות</p>) : scanFeed.map((log) => (
+            {scanFeed.length === 0 ? (<p style={{color: '#999', textAlign: 'center'}}>אין סריקות ב-24 שעות האחרונות</p>) : scanFeed.map((log) => (
               <div key={log.id} style={{ padding: '15px', borderRadius: '10px', backgroundColor: log.action.includes('FAIL') ? '#fef2f2' : '#f0f9ff', borderRight: log.action.includes('FAIL') ? '4px solid #ef4444' : '4px solid #0ea5e9' }}>
                 <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#374151' }}>{log.action === 'SCAN' ? '✅ סריקה' : '⚠️ שגיאה'}</div>
                 <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '5px' }}>{log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : '---'}</div>
@@ -256,7 +272,7 @@ const AdminPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* מודל עריכה - מעוצב */}
+      {/* מודל עריכה */}
       {editingPatient && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
           <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '15px', width: '400px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'right' }}>
