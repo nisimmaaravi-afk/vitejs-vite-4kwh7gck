@@ -1,133 +1,103 @@
-import React from 'react';
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 
-interface EmergencyProps {
-  patientData: any;
-}
+export default function Emergency() {
+  const { id } = useParams(); 
+  const [patient, setPatient] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-export default function Emergency({ patientData }: EmergencyProps) {
-  if (!patientData) return <div style={{padding:'20px', textAlign:'center'}}>טוען נתונים...</div>;
+  useEffect(() => {
+    const fetchPatient = async () => {
+      if (!id) return;
+      try {
+        // מנסה למשוך את פרטי המבוטח לפי ה-ID שבברקוד
+        const docRef = doc(db, "users", id);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          setPatient(docSnap.data());
+        }
+      } catch (error) {
+        console.error("Error fetching patient:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPatient();
+  }, [id]);
+
+  if (loading) return <div style={{textAlign: 'center', marginTop: '50px', fontSize: '20px'}}>טוען נתוני חירום...</div>;
+
+  if (!patient) return (
+    <div style={{textAlign: 'center', padding: '20px', direction: 'rtl'}}>
+      <h2 style={{color: 'red'}}>❌ לא נמצא מבוטח</h2>
+      <p>הצמיד הזה עדיין לא שויך למטופל במערכת.</p>
+    </div>
+  );
 
   return (
-    <div style={containerS}>
-      <div style={bubble1S}></div>
-      <div style={bubble2S}></div>
+    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto', direction: 'rtl', textAlign: 'right', fontFamily: 'sans-serif' }}>
+      
+      {/* כותרת אדומה בולטת */}
+      <div style={{ 
+        backgroundColor: '#ffebee', 
+        color: '#d32f2f', 
+        padding: '15px', 
+        borderRadius: '8px', 
+        border: '2px solid #d32f2f', 
+        marginBottom: '20px',
+        textAlign: 'center'
+      }}>
+        <h1 style={{ margin: 0, fontSize: '24px' }}>⚠️ מטופל לפניך</h1>
+        <p style={{ margin: '5px 0 0 0' }}>יש לפעול בהתאם לפרוטוקול</p>
+      </div>
 
-      <div style={cardS}>
-        <div style={{textAlign: 'center', marginBottom: '20px'}}>
-          <div style={{fontSize: '2.5rem', marginBottom: '5px'}}>🚨</div>
-          <h2 style={{color: '#d32f2f', margin: '0', fontSize: '2.2rem', fontWeight:'800'}}>זיהוי חירום</h2>
-          <p style={{letterSpacing: '2px', color: '#b71c1c', margin: '5px 0 0 0', fontWeight: 'bold', fontSize: '0.9rem', opacity:0.7}}>
-            RECOGNITION LIVE
-          </p>
-        </div>
-
-        <div style={{display:'flex', justifyContent:'center', marginBottom:'20px'}}>
-          <img 
-            src={patientData.photoUrl || "https://cdn-icons-png.flaticon.com/512/847/847969.png"} 
-            alt="Patient" 
-            style={imageS} 
-          />
-        </div>
-
-        <div style={{textAlign: 'center', marginBottom:'25px'}}>
-          <h1 style={nameS}>{patientData.name}</h1>
-          <div style={idBadgeS}>ת"ז: {patientData.personalId || "לא צוין"}</div>
-        </div>
-
-        <hr style={{border:'none', borderTop:'2px dashed #ffcdd2', margin:'20px 0'}} />
-
-        <div style={{textAlign:'center', marginBottom:'25px'}}>
-          <label style={{display:'block', marginBottom:'8px', color:'#d32f2f', fontWeight:'bold'}}>
-            איש קשר לחירום:
-          </label>
-          <a href={`tel:${patientData.emergencyPhone}`} style={callButtonS}>
-             <span style={{fontSize:'1.8rem', marginRight:'10px'}}>📞</span>
-             <div>
-                <div style={{fontSize:'1.3rem'}}>חייג עכשיו</div>
-                <div style={{fontSize:'0.9rem', fontWeight:'normal', opacity:0.9}}>
-                  {patientData.emergencyPhone}
-                </div>
-             </div>
-          </a>
-        </div>
-
-        <div style={infoBoxS}>
-          <h3 style={infoTitleS}>📝 מידע רפואי חשוב:</h3>
-          <p style={infoTextS}>
-            {patientData.story || "אין מידע רפואי נוסף."}
-          </p>
+      {/* כרטיס פרטים */}
+      <div style={{ 
+        border: '1px solid #ddd', 
+        borderRadius: '12px', 
+        padding: '20px', 
+        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+        backgroundColor: 'white'
+      }}>
+        <h2 style={{ marginTop: 0, fontSize: '28px', color: '#333' }}>
+          {patient.firstName} {patient.lastName}
+        </h2>
+        
+        <div style={{ fontSize: '18px', lineHeight: '1.6', color: '#555' }}>
+          <p><strong>🆔 תעודת זהות:</strong> {patient.idNumber || '---'}</p>
+          <p><strong>📍 עיר מגורים:</strong> {patient.city || '---'}</p>
+          <p><strong>📝 הערות רפואיות:</strong> {patient.notes || 'אין הערות מיוחדות'}</p>
         </div>
         
-        <div style={footerS}>
-           מיקום GPS נשלח למשפחה באופן אוטומטי ✅
-           <br/>
-           <span style={{opacity:0.6, fontSize:'0.75rem'}}>BID: {patientData.braceletId}</span>
-        </div>
+        <hr style={{ margin: '20px 0', border: 'none', borderTop: '1px solid #eee' }} />
+        
+        {/* כפתור חיוג חירום */}
+        {patient.emergencyPhone && (
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontWeight: 'bold', marginBottom: '10px' }}>איש קשר לחירום:</p>
+            <a 
+              href={`tel:${patient.emergencyPhone}`}
+              style={{
+                display: 'block',
+                backgroundColor: '#d32f2f', // אדום חירום
+                color: 'white',
+                padding: '15px',
+                borderRadius: '50px',
+                textDecoration: 'none',
+                fontWeight: 'bold',
+                fontSize: '20px',
+                boxShadow: '0 4px 10px rgba(211, 47, 47, 0.3)'
+              }}
+            >
+              📞 חייג עכשיו: {patient.emergencyPhone}
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-
-// --- סגנונות ---
-const containerS: React.CSSProperties = {
-  minHeight: '100vh',
-  background: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)',
-  display: 'flex', justifyContent: 'center', alignItems: 'center',
-  padding: '20px', fontFamily: 'system-ui, -apple-system, sans-serif',
-  direction: 'rtl', position: 'relative', overflow: 'hidden'
-};
-
-const bubble1S: React.CSSProperties = {
-  position: 'absolute', top: '-50px', right: '-50px', width: '200px', height: '200px',
-  borderRadius: '50%', background: 'rgba(255, 255, 255, 0.2)', zIndex: 0
-};
-
-const bubble2S: React.CSSProperties = {
-  position: 'absolute', bottom: '-20px', left: '-20px', width: '150px', height: '150px',
-  borderRadius: '50%', background: 'rgba(255, 255, 255, 0.15)', zIndex: 0
-};
-
-const cardS: React.CSSProperties = {
-  backgroundColor: 'rgba(255, 255, 255, 0.95)', width: '100%', maxWidth: '400px',
-  borderRadius: '24px', padding: '30px', boxShadow: '0 25px 50px rgba(198, 40, 40, 0.25)',
-  position: 'relative', zIndex: 1, backdropFilter: 'blur(10px)', borderTop: '5px solid #d32f2f'
-};
-
-const imageS: React.CSSProperties = {
-  width: '130px', height: '130px', borderRadius: '50%', objectFit: 'cover',
-  border: '4px solid white', boxShadow: '0 8px 20px rgba(211, 47, 47, 0.2)'
-};
-
-const nameS: React.CSSProperties = {
-  fontSize: '2rem', margin: '0 0 5px 0', color: '#333', fontWeight: '800'
-};
-
-const idBadgeS: React.CSSProperties = {
-  display: 'inline-block', backgroundColor: '#f5f5f5', padding: '6px 15px',
-  borderRadius: '20px', color: '#555', fontSize: '1rem', fontWeight: '600', marginTop: '5px'
-};
-
-const callButtonS: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  backgroundColor: '#d32f2f', color: 'white', textDecoration: 'none',
-  padding: '15px 20px', borderRadius: '16px', fontWeight: 'bold',
-  boxShadow: '0 8px 25px rgba(211, 47, 47, 0.5)', transition: 'transform 0.2s',
-  border: '2px solid #b71c1c'
-};
-
-const infoBoxS: React.CSSProperties = {
-  backgroundColor: '#fffde7', padding: '20px', borderRadius: '16px',
-  borderRight: '5px solid #fbc02d', textAlign: 'right', marginTop: '20px'
-};
-
-const infoTitleS: React.CSSProperties = {
-  margin: '0 0 8px 0', color: '#f57f17', fontSize: '1.1rem', fontWeight: 'bold'
-};
-
-const infoTextS: React.CSSProperties = {
-  margin: 0, color: '#4e342e', lineHeight: '1.6', fontSize: '1rem'
-};
-
-const footerS: React.CSSProperties = {
-  marginTop: '30px', textAlign: 'center', color: '#1b5e20', fontWeight: 'bold', fontSize: '0.9rem'
-};
