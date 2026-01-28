@@ -3,7 +3,6 @@ import { useSearchParams, Routes, Route, Navigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './services/firebase';
 
-// דפים
 import Login from './pages/Login';
 import AdminPanel from './pages/AdminPanel';
 import Emergency from './pages/Emergency';
@@ -11,44 +10,50 @@ import Register from './pages/Register';
 
 function App() {
   const [searchParams] = useSearchParams();
-  const bid = searchParams.get('bid'); // תופס את המספר מהלינק
-
-  // משתנה לבדיקה אם הצמיד קיים
+  const bid = searchParams.get('bid'); 
+  
   const [isValidTag, setIsValidTag] = useState<boolean | null>(null);
 
-  // --- לוגיקה 1: טיפול בצמיד (רץ רק אם יש bid) ---
   useEffect(() => {
     async function checkTag() {
+      // אם אין מספר, אל תעשה כלום
       if (!bid) return;
-      
+
       try {
-        const docRef = doc(db, "users", bid); // וודא שהאוסף שלך הוא 'users' או 'patients' (תלוי מה בחרת)
+        // שים לב: בודק באוסף users
+        const docRef = doc(db, "users", bid);
         const docSnap = await getDoc(docRef);
         setIsValidTag(docSnap.exists());
       } catch (error) {
-        console.error("Error checking tag:", error);
-        // במקרה שגיאה נניח שזה לא קיים כדי לא לתקוע מסך
-        setIsValidTag(false); 
+        console.error("Error verifying tag:", error);
+        // במקרה של שגיאה, נניח שצריך להירשם (Safety Fallback)
+        setIsValidTag(false);
       }
     }
     checkTag();
   }, [bid]);
 
-  // --- החלטה 1: האם זה צמיד? ---
+  // ============================================
+  // מחסום ברזל: אם יש מספר צמיד - טפל רק בו!
+  // ============================================
   if (bid) {
-    // 1. עדיין בודק...
+    // 1. שלב טעינה (מציג מסך לבן נקי עם טעינה)
     if (isValidTag === null) {
       return (
-        <div style={{height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', direction: 'rtl'}}>
-          <h2>🔄 מאמת נתוני צמיד...</h2>
+        <div style={{height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', fontFamily: 'sans-serif'}}>
+          <div style={{fontSize: '40px', marginBottom: '20px'}}>🛡️</div>
+          <h3>מאמת צמיד...</h3>
         </div>
       );
     }
-    // 2. סיים לבדוק: קיים -> חירום, לא קיים -> הרשמה
+    
+    // 2. ההחלטה: הרשמה או חירום
     return isValidTag ? <Emergency tagId={bid} /> : <Register tagId={bid} />;
   }
 
-  // --- החלטה 2: אין צמיד? זה מנהל! ---
+  // ============================================
+  // רק אם אין צמיד - תציג את הראוטר הרגיל
+  // ============================================
   return (
     <Routes>
       <Route path="/" element={<Login />} />
