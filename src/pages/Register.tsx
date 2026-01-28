@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import logo from '../assets/logo.png'; // וודא שהלוגו קיים בתיקייה
+import logo from '../assets/logo.png'; 
 
 export default function Register({ tagId }: { tagId: string }) {
   const [loading, setLoading] = useState(false);
@@ -18,17 +18,20 @@ export default function Register({ tagId }: { tagId: string }) {
     setLoading(true);
 
     try {
-      await setDoc(doc(db, "users", tagId), { // שמירה באוסף users
+      // 1. שמירת הנתונים בשרת
+      await setDoc(doc(db, "users", tagId), {
         ...formData,
         tagId: tagId,
         createdAt: new Date()
       });
-      // רענון כדי שהאפליקציה תזהה שהמשתמש קיים ותעבור למסך חירום
-      window.location.reload();
+
+      // 2. התיקון הקריטי: מעבר כפוי לכתובת עם המספר צמיד
+      // זה מבטיח שה-bid לא ילך לאיבוד ברענון
+      window.location.href = `/?bid=${tagId}`;
+
     } catch (error) {
       alert("שגיאה בשמירה, נסה שוב.");
-    } finally {
-      setLoading(false);
+      setLoading(false); // מאפשר לנסות שוב אם נכשל
     }
   };
 
