@@ -9,12 +9,11 @@ import Emergency from './pages/Emergency';
 import Register from './pages/Register';
 
 function App() {
-  // קריאת הפרמטר ישירות מה-URL
   const queryParams = new URLSearchParams(window.location.search);
   const bid = queryParams.get('bid'); 
   
   const [isValidTag, setIsValidTag] = useState<boolean | null>(null);
-  const hasLogged = useRef(false); // מונע כתיבה כפולה של אותו לוג
+  const hasLogged = useRef(false);
 
   useEffect(() => {
     async function checkTag() {
@@ -27,16 +26,49 @@ function App() {
         
         setIsValidTag(exists);
 
-        // --- התיקון: דיווח על הסריקה למסד הנתונים ---
+        // --- לוגיקה חדשה: רישום סריקה עם מיקום GPS ---
         if (exists && !hasLogged.current) {
-          hasLogged.current = true; // סימון שדיווחנו כדי לא לשכפל
-          await addDoc(collection(db, 'system_logs'), {
-            action: 'SCAN',
-            details: bid, // שומרים את מספר הצמיד שנסרק
-            timestamp: serverTimestamp(), // שומרים את הזמן המדויק
-            user: 'System'
-          });
-          console.log("Scan logged successfully");
+          hasLogged.current = true;
+          
+          // פונקציה פנימית לרישום הלוג
+          const logScanWithLocation = async (position: GeolocationPosition | null) => {
+            const scanData: any = {
+              action: 'SCAN',
+              details: bid,
+              timestamp: serverTimestamp(),
+              user: 'System'
+            };
+
+            // אם הצלחנו להשיג מיקום - מוסיפים אותו
+            if (position) {
+              scanData.location = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              };
+              scanData.accuracy = position.coords.accuracy; // שומר גם את רמת הדיוק
+            }
+
+            try {
+                await addDoc(collection(db, 'system_logs'), scanData);
+                console.log("Scan logged. GPS:", position ? "Yes" : "No");
+            } catch (e) {
+                console.error("Failed to log scan", e);
+            }
+          };
+
+          // בקשת מיקום מהדפדפן
+          if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(
+              (position) => logScanWithLocation(position), // הצלחה
+              (error) => {
+                console.warn("Location access denied or failed:", error);
+                logScanWithLocation(null); // כישלון - רושמים בלי מיקום
+              },
+              { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+            );
+          } else {
+            logScanWithLocation(null);
+          }
         }
         // -------------------------------------------
 
@@ -48,27 +80,19 @@ function App() {
     checkTag();
   }, [bid]);
 
-  // ============================================
-  // מחסום ברזל: אם יש מספר צמיד - המערכת נעולה עליו
-  // ============================================
   if (bid) {
-    // 1. שלב טעינה
     if (isValidTag === null) {
       return (
-        <div style={{height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', fontFamily: 'sans-serif'}}>
-          <div style={{fontSize: '40px', marginBottom: '20px'}}>🛡️</div>
-          <h3>מאמת צמיד... ({bid})</h3>
+        <div style={{height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', fontFamily: 'sans-serif', background: '#f0f9ff'}}>
+          <div style={{fontSize: '40px', marginBottom: '20px'}}>🛰️</div>
+          <h3 style={{color: '#0284c7'}}>מאמת מיקום ונתונים...</h3>
+          <p style={{color: '#64748b', fontSize: '12px'}}>({bid})</p>
         </div>
       );
     }
-    
-    // 2. ההחלטה: הרשמה או חירום
     return isValidTag ? <Emergency tagId={bid} /> : <Register tagId={bid} />;
   }
 
-  // ============================================
-  // רק אם ה-bid ריק - תציג את המנהל
-  // ============================================
   return (
     <Routes>
       <Route path="/" element={<Login />} />

@@ -41,7 +41,7 @@ const AdminPanel: React.FC = () => {
     fullName: '', braceletId: '', district: '', phone: '', history: '' 
   });
 
-  // --- חזרנו ל-3 מחוזות בלבד ---
+  // קואורדינטות בסיס למחוזות (גיבוי בלבד)
   const districtsCoords: { [key: string]: [number, number] } = {
     'north': [32.8, 35.3],
     'center': [32.08, 34.78],
@@ -121,34 +121,42 @@ const AdminPanel: React.FC = () => {
     return date >= thirtyDaysAgo;
   };
 
-  const getPosition = (district: string): [number, number] => {
+  // פונקציית גיבוי למקרה שאין GPS
+  const getFallbackPosition = (district: string): [number, number] => {
     const safeDistrict = String(district || 'default').toLowerCase();
-    
-    // אם המחוז מוכר (צפון, דרום, מרכז)
     if (districtsCoords[safeDistrict]) {
         const base = districtsCoords[safeDistrict];
         return [base[0] + (Math.random() * 0.04 - 0.02), base[1] + (Math.random() * 0.04 - 0.02)];
     }
-
-    // תאימות לאחור: אם בטעות יש 'ירושלים' או 'יו"ש', נזרוק אותם למרכז כדי שיופיעו במפה
-    if (safeDistrict.includes('jerusalem') || safeDistrict.includes('judea')) return districtsCoords['center'];
-
-    // ברירת מחדל
-    const base = districtsCoords['default'];
-    return [base[0] + (Math.random() * 0.04 - 0.02), base[1] + (Math.random() * 0.04 - 0.02)];
+    return [31.4 + (Math.random() * 0.1), 35.0 + (Math.random() * 0.1)];
   };
 
+  // --- יצירת המרקרים למפה ---
   const getMapMarkers = () => {
     const recentScans = logs.filter((l:any) => l.action === 'SCAN' && isLast30Days(l.timestamp));
+    
     return recentScans.map((scan: any) => {
       const patient = patients.find(p => p.braceletId === scan.details);
       if (!patient) return null;
+
+      let position: [number, number];
+      let isGps = false;
+
+      // בדיקה קריטית: האם הגיע מיקום מהטלפון?
+      if (scan.location && scan.location.lat && scan.location.lng) {
+        position = [scan.location.lat, scan.location.lng];
+        isGps = true;
+      } else {
+        position = getFallbackPosition(patient.district);
+      }
+
       return { 
         id: scan.id, 
         fullName: patient.fullName, 
         braceletId: patient.braceletId, 
         district: patient.district, 
-        pos: getPosition(patient.district), 
+        pos: position, 
+        isGps: isGps, 
         scanTime: scan.timestamp?.toDate() 
       };
     }).filter(Boolean);
@@ -279,7 +287,10 @@ const AdminPanel: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             {scanFeed.length === 0 ? (<p style={{color: '#999', textAlign: 'center'}}>אין סריקות ב-24 שעות האחרונות</p>) : scanFeed.map((log) => (
               <div key={log.id} style={{ padding: '15px', borderRadius: '10px', backgroundColor: log.action.includes('FAIL') ? '#fef2f2' : '#f0f9ff', borderRight: log.action.includes('FAIL') ? '4px solid #ef4444' : '4px solid #0ea5e9' }}>
-                <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#374151' }}>{log.action === 'SCAN' ? '✅ סריקה' : '⚠️ שגיאה'}</div>
+                <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#374151' }}>
+                    {log.action === 'SCAN' ? '✅ סריקה' : '⚠️ שגיאה'}
+                    {log.location && <span style={{fontSize: '10px', marginRight: '5px', background: '#ecfdf5', color: '#059669', padding: '2px 5px', borderRadius: '4px', float: 'left'}}>📡 GPS</span>}
+                </div>
                 <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '5px' }}>{log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : '---'}</div>
                 <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0d6efd', marginTop: '5px' }}>{log.details}</div>
               </div>
@@ -295,16 +306,31 @@ const AdminPanel: React.FC = () => {
           <MapContainer center={[32.0853, 34.7818]} zoom={8} style={{ height: '100%', width: '100%' }}>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
             {getMapMarkers().map((item: any) => (
-              <CircleMarker key={item.id} center={item.pos} pathOptions={{ color: 'red', fillColor: '#f03', fillOpacity: 0.6 }} radius={8}>
+              <CircleMarker 
+                key={item.id} 
+                center={item.pos} 
+                pathOptions={{ 
+                    // צבע ירוק ל-GPS אמיתי, אדום לגיבוי
+                    color: item.isGps ? '#059669' : 'red', 
+                    fillColor: item.isGps ? '#10b981' : '#f03', 
+                    fillOpacity: 0.7 
+                }} 
+                radius={item.isGps ? 12 : 8} // נקודת GPS קצת יותר גדולה
+              >
                 <Tooltip direction="top" offset={[0, -10]} opacity={1} permanent>{item.fullName}</Tooltip>
-                <Popup><strong>{item.fullName}</strong><br/>צמיד: {item.braceletId}<br/>נסרק ב: {item.scanTime?.toLocaleString()}</Popup>
+                <Popup>
+                    <strong>{item.fullName}</strong><br/>
+                    צמיד: {item.braceletId}<br/>
+                    נסרק ב: {item.scanTime?.toLocaleString()}<br/>
+                    {item.isGps ? <span style={{color: '#059669', fontWeight: 'bold'}}>📡 מיקום מדויק (GPS)</span> : <span style={{color: '#ef4444'}}>📍 מיקום משוער (מחוז)</span>}
+                </Popup>
               </CircleMarker>
             ))}
           </MapContainer>
         </div>
       </div>
 
-      {/* מודל עריכה */}
+      {/* מודל עריכה נשאר זהה */}
       {editingPatient && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
           <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '15px', width: '400px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'right' }}>
@@ -313,14 +339,12 @@ const AdminPanel: React.FC = () => {
             <input type="text" value={editForm.fullName} onChange={e => setEditForm({...editForm, fullName: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px'}} />
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>מספר צמיד:</label>
             <input type="text" value={editForm.braceletId} onChange={e => setEditForm({...editForm, braceletId: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px'}} />
-            
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>מחוז:</label>
             <select value={editForm.district} onChange={e => setEditForm({...editForm, district: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px', background: 'white'}}>
                 <option value="center">מרכז</option>
                 <option value="north">צפון</option>
                 <option value="south">דרום</option>
             </select>
-            
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>טלפון:</label>
             <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px'}} />
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>מידע רפואי:</label>
