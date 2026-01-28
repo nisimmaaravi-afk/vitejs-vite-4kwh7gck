@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
 import { collection, getDocs, deleteDoc, doc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
-// import { logAction } from '../services/logger'; // אם אין לך קובץ logger, שים את זה בהערה
 import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// פונקציית עזר ללוגים (במקום הקובץ החיצוני שאולי חסר)
+// פונקציית עזר ללוגים
 const logAction = async (user: string, action: string, details: string) => {
   console.log(`[LOG] ${user}: ${action} - ${details}`);
 };
@@ -18,16 +17,22 @@ interface Patient {
   district: string;
   personalPhone: string;
   medicalHistory: string;
+  firstName?: string;
+  lastName?: string;
+  city?: string;
+  notes?: string;
+  patientPhone?: string;
+  phone?: string;
+  tagId?: string;
 }
 
 const AdminPanel: React.FC = () => {
   const navigate = useNavigate();
   
-  // --- התיקון: חיבור למנגנון הלוגין החדש ---
+  // חיבור למנגנון הלוגין
   const isAdmin = sessionStorage.getItem('isAdmin');
   const accessLevel = sessionStorage.getItem('userRole');
   const currentUser = isAdmin ? (accessLevel === 'master' ? 'Master Admin' : 'Admin') : null;
-  // ------------------------------------------
 
   // State
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -49,23 +54,34 @@ const AdminPanel: React.FC = () => {
   };
 
   useEffect(() => {
-    // אם אין כרטיס כניסה - זורק ללוגין
     if (!isAdmin) {
       navigate('/');
     } else {
       fetchData();
-      const interval = setInterval(fetchData, 30000);
+      const interval = setInterval(fetchData, 30000); 
       return () => clearInterval(interval);
     }
   }, [isAdmin, navigate]);
 
   const fetchData = async () => {
     try {
-      const patSnap = await getDocs(collection(db, 'patients')); // וודא ששם האוסף ב-DB הוא users או patients
-      const patList = patSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Patient));
+      // טעינת מבוטחים מאוסף users
+      const patSnap = await getDocs(collection(db, 'users')); 
+      const patList = patSnap.docs.map(doc => {
+        const data = doc.data();
+        return { 
+          id: doc.id, 
+          ...data,
+          fullName: data.fullName || `${data.firstName || ''} ${data.lastName || ''}`,
+          braceletId: data.tagId || doc.id,
+          medicalHistory: data.notes || data.medicalHistory || '',
+          personalPhone: data.patientPhone || data.phone || '',
+          district: data.city || data.district || 'כללי'
+        } as Patient;
+      });
       setPatients(patList);
 
-      // ניסיון לטעון לוגים (אם קיים אוסף כזה)
+      // לוגים וסטטיסטיקה
       try {
         const q = query(collection(db, 'system_logs'), orderBy('timestamp', 'desc'), limit(100));
         const logSnap = await getDocs(q);
@@ -82,10 +98,20 @@ const AdminPanel: React.FC = () => {
         });
       } catch (e) {
           console.log("No logs collection found yet");
+          setStats(prev => ({ ...prev, month: patList.length }));
       }
 
     } catch (error) {
       console.error("Error loading data:", error);
+    }
+  };
+
+  // --- הפונקציה להוספת מבוטח ידנית ---
+  const handleAddPatient = () => {
+    const id = prompt("הכנס מספר צמיד חדש (למשל: 1002):");
+    if (id && id.trim().length > 0) {
+      // מעבר ישיר לרישום עם המספר שהוזן
+      window.location.href = `/?bid=${id}`;
     }
   };
 
@@ -106,6 +132,7 @@ const AdminPanel: React.FC = () => {
 
   const getPosition = (district: string): [number, number] => {
     const safeDistrict = String(district || 'default').toLowerCase();
+    if (safeDistrict.includes('tel aviv') || safeDistrict.includes('תל אביב')) return districtsCoords['center'];
     const base = districtsCoords[safeDistrict] || districtsCoords['default'];
     return [base[0] + (Math.random() * 0.04 - 0.02), base[1] + (Math.random() * 0.04 - 0.02)];
   };
@@ -129,7 +156,7 @@ const AdminPanel: React.FC = () => {
   const handleDelete = async (docId: string) => {
     if (accessLevel !== 'master') return alert('⛔ רק Master Admin מורשה למחוק');
     if (window.confirm('למחוק לצמיתות?')) {
-      await deleteDoc(doc(db, 'patients', docId)); // שים לב: אם האוסף שלך הוא users שנה ל-users
+      await deleteDoc(doc(db, 'users', docId));
       await logAction(currentUser || 'Admin', 'DELETE', `מחיקת מבוטח ID: ${docId}`);
       fetchData();
     }
@@ -149,12 +176,12 @@ const AdminPanel: React.FC = () => {
   const saveEdit = async () => {
     if (!editingPatient) return;
     try {
-      await updateDoc(doc(db, 'patients', editingPatient.id), { 
+      await updateDoc(doc(db, 'users', editingPatient.id), { 
         fullName: editForm.fullName, 
-        braceletId: editForm.braceletId, 
-        district: editForm.district, 
-        personalPhone: editForm.phone, 
-        medicalHistory: editForm.history 
+        tagId: editForm.braceletId, 
+        city: editForm.district, 
+        patientPhone: editForm.phone, 
+        notes: editForm.history 
       });
       await logAction(currentUser || 'User', 'UPDATE', `עריכה מלאה: ${editForm.fullName}`);
       setEditingPatient(null);
@@ -164,7 +191,6 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // סגנונות לכפתורים מרובעים
   const btnIconStyle: React.CSSProperties = {
     width: '40px', 
     height: '40px', 
@@ -211,8 +237,8 @@ const AdminPanel: React.FC = () => {
         <div style={{ backgroundColor: 'white', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', height: '500px', overflowY: 'auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #f3f4f6', paddingBottom: '15px', marginBottom: '15px' }}>
              <h3 style={{ margin: 0 }}>👥 מבוטחים ({patients.length})</h3>
-             {/* כפתור הוספה הוסר כי הרישום הוא רק דרך הצמיד, או שתשאיר אותו אם יש צורך */}
-             {/* <button onClick={() => navigate('/register')} ... >➕ הוסף מבוטח</button> */}
+             {/* הכפתור החדש שלך */}
+             <button onClick={handleAddPatient} style={{ background: '#2563eb', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(37, 99, 235, 0.3)' }}>➕ הוסף מבוטח</button>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -232,7 +258,7 @@ const AdminPanel: React.FC = () => {
                     )}
                     <button onClick={() => startEdit(p)} style={{ ...btnIconStyle, background: 'white', color: '#555' }} title="ערוך">✏️</button>
                   </td>
-                  <td style={{ padding: '10px' }}><span style={{ padding: '5px 12px', borderRadius: '20px', backgroundColor: '#e3f2fd', color: '#1976d2', fontSize: '12px', fontWeight: 'bold' }}>{p.district || 'כללי'}</span></td>
+                  <td style={{ padding: '10px' }}><span style={{ padding: '5px 12px', borderRadius: '20px', backgroundColor: '#e3f2fd', color: '#1976d2', fontSize: '12px', fontWeight: 'bold' }}>{p.district}</span></td>
                   <td style={{ padding: '10px', fontWeight: 'bold', fontSize: '15px', color: '#333' }}>{p.fullName || '---'}</td>
                   <td style={{ padding: '10px', color: '#666' }}>{p.personalPhone}</td>
                 </tr>
@@ -277,22 +303,16 @@ const AdminPanel: React.FC = () => {
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
           <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '15px', width: '400px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'right' }}>
             <h3 style={{color: '#2c3e50', textAlign: 'center', marginBottom: '25px', fontSize: '22px'}}>עריכה מלאה:</h3>
-            
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>שם מלא:</label>
             <input type="text" value={editForm.fullName} onChange={e => setEditForm({...editForm, fullName: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px'}} />
-            
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>מספר צמיד:</label>
             <input type="text" value={editForm.braceletId} onChange={e => setEditForm({...editForm, braceletId: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px'}} />
-            
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>מחוז (north/center/south):</label>
             <input type="text" value={editForm.district} onChange={e => setEditForm({...editForm, district: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px'}} />
-            
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>טלפון:</label>
             <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px'}} />
-            
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>מידע רפואי:</label>
             <textarea value={editForm.history} onChange={e => setEditForm({...editForm, history: e.target.value})} rows={4} style={{ width: '100%', padding: '12px', marginBottom: '25px', border: '1px solid #ccc', borderRadius: '8px'}} />
-            
             <div style={{ display: 'flex', gap: '15px' }}>
               <button onClick={() => setEditingPatient(null)} style={{ flex: 1, padding: '12px', background: '#9ca3af', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>ביטול</button>
               <button onClick={saveEdit} style={{ flex: 1, padding: '12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>שמור</button>
