@@ -23,6 +23,7 @@ interface Patient {
   patientPhone?: string;
   phone?: string;
   tagId?: string;
+  idNumber?: string;
 }
 
 const AdminPanel: React.FC = () => {
@@ -35,13 +36,14 @@ const AdminPanel: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [scanFeed, setScanFeed] = useState<any[]>([]);
   const [stats, setStats] = useState({ today: 0, week: 0, month: 0 });
+  
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [editForm, setEditForm] = useState({ 
     fullName: '', braceletId: '', district: '', phone: '', history: '' 
   });
 
-  // קואורדינטות בסיס למחוזות (גיבוי בלבד)
   const districtsCoords: { [key: string]: [number, number] } = {
     'north': [32.8, 35.3],
     'center': [32.08, 34.78],
@@ -54,7 +56,7 @@ const AdminPanel: React.FC = () => {
       navigate('/');
     } else {
       fetchData();
-      const interval = setInterval(fetchData, 30000); 
+      const interval = setInterval(fetchData, 10000); 
       return () => clearInterval(interval);
     }
   }, [isAdmin, navigate]);
@@ -77,7 +79,7 @@ const AdminPanel: React.FC = () => {
       setPatients(patList);
 
       try {
-        const q = query(collection(db, 'system_logs'), orderBy('timestamp', 'desc'), limit(100));
+        const q = query(collection(db, 'system_logs'), orderBy('timestamp', 'desc'), limit(500));
         const logSnap = await getDocs(q);
         const logList = logSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setLogs(logList);
@@ -99,11 +101,41 @@ const AdminPanel: React.FC = () => {
     }
   };
 
+  const filteredPatients = patients.filter(p => {
+    const term = searchTerm.toLowerCase();
+    return (
+        (p.fullName && p.fullName.toLowerCase().includes(term)) ||
+        (p.braceletId && p.braceletId.includes(term)) ||
+        (p.idNumber && p.idNumber.includes(term)) ||
+        (p.personalPhone && p.personalPhone.includes(term))
+    );
+  });
+
+  const exportToCSV = () => {
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Time,Action,Bracelet ID,Details,Outcome,Duration,Notes\n";
+
+    logs.forEach(log => {
+        const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : '';
+        const outcome = log.outcome || '';
+        const duration = log.duration_text || '';
+        const notes = log.notes ? log.notes.replace(/,/g, ' ') : '';
+        const row = `${time},${log.action},${log.details},${outcome},${duration},${notes}`;
+        csvContent += row + "\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "recognition_live_data.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleAddPatient = () => {
     const id = prompt("הכנס מספר צמיד חדש (למשל: 1002):");
-    if (id && id.trim().length > 0) {
-      window.location.href = `/?bid=${id}`;
-    }
+    if (id && id.trim().length > 0) window.location.href = `/?bid=${id}`;
   };
 
   const safeIsToday = (timestamp: any) => {
@@ -121,7 +153,6 @@ const AdminPanel: React.FC = () => {
     return date >= thirtyDaysAgo;
   };
 
-  // פונקציית גיבוי למקרה שאין GPS
   const getFallbackPosition = (district: string): [number, number] => {
     const safeDistrict = String(district || 'default').toLowerCase();
     if (districtsCoords[safeDistrict]) {
@@ -131,24 +162,38 @@ const AdminPanel: React.FC = () => {
     return [31.4 + (Math.random() * 0.1), 35.0 + (Math.random() * 0.1)];
   };
 
-  // --- יצירת המרקרים למפה ---
+  const getEventStatus = (scanLog: any, allLogs: any[]) => {
+      const scanTime = scanLog.timestamp?.toDate ? scanLog.timestamp.toDate() : new Date();
+      const now = new Date();
+      const diffMinutes = (now.getTime() - scanTime.getTime()) / 60000;
+      const resolveLog = allLogs.find(l => l.action === 'EVENT_RESOLVED' && l.details === scanLog.details && l.timestamp?.toDate() > scanTime);
+
+      if (resolveLog) return { color: '#10b981', label: 'סגור' }; // ירוק
+      if (diffMinutes > 60) return { color: '#9ca3af', label: 'לבירור' }; // אפור
+      return { color: '#ef4444', label: 'פתוח' }; // אדום
+  };
+
   const getMapMarkers = () => {
     const recentScans = logs.filter((l:any) => l.action === 'SCAN' && isLast30Days(l.timestamp));
-    
-    return recentScans.map((scan: any) => {
+    const uniqueScans = new Map();
+    recentScans.forEach((scan: any) => {
+        if (!uniqueScans.has(scan.details)) uniqueScans.set(scan.details, scan);
+    });
+
+    return Array.from(uniqueScans.values()).map((scan: any) => {
       const patient = patients.find(p => p.braceletId === scan.details);
       if (!patient) return null;
 
       let position: [number, number];
       let isGps = false;
 
-      // בדיקה קריטית: האם הגיע מיקום מהטלפון?
       if (scan.location && scan.location.lat && scan.location.lng) {
         position = [scan.location.lat, scan.location.lng];
         isGps = true;
       } else {
         position = getFallbackPosition(patient.district);
       }
+      const eventStatus = getEventStatus(scan, logs);
 
       return { 
         id: scan.id, 
@@ -157,7 +202,9 @@ const AdminPanel: React.FC = () => {
         district: patient.district, 
         pos: position, 
         isGps: isGps, 
-        scanTime: scan.timestamp?.toDate() 
+        scanTime: scan.timestamp?.toDate(),
+        statusColor: eventStatus.color,
+        statusLabel: eventStatus.label
       };
     }).filter(Boolean);
   };
@@ -201,15 +248,8 @@ const AdminPanel: React.FC = () => {
   };
 
   const btnIconStyle: React.CSSProperties = {
-    width: '40px', 
-    height: '40px', 
-    borderRadius: '8px', 
-    border: '1px solid #ddd', 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    cursor: 'pointer', 
-    fontSize: '18px'
+    width: '40px', height: '40px', borderRadius: '8px', border: '1px solid #ddd', 
+    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '18px'
   };
 
   if (!isAdmin) return null;
@@ -217,14 +257,23 @@ const AdminPanel: React.FC = () => {
   return (
     <div style={{ padding: '20px', direction: 'rtl', fontFamily: 'Segoe UI, Arial', backgroundColor: '#f3f4f6', minHeight: '100vh' }}>
       
-      {/* כותרת */}
+      {/* כותרת משודרגת עם לוגו מותג */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', backgroundColor: 'white', padding: '15px 25px', borderRadius: '15px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <img src="/logo.png" alt="Logo" style={{ height: '50px', objectFit: 'contain' }} onError={(e) => e.currentTarget.style.display = 'none'} />
-          <div><p style={{ margin: '0', color: '#6b7280', fontSize: '18px', fontWeight: 'bold' }}>מערכת שליטה ובקרה ארצית</p></div>
-        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          {accessLevel === 'master' && (<button onClick={() => alert('יומן מלא בקרוב')} style={{ background: 'white', border: '1px solid #ccc', padding: '8px 15px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>📜 יומן מערכת</button>)}
+          
+          {/* לוגו טקסטואלי חזק - Recognition Live */}
+          <div style={{ fontSize: '26px', fontWeight: '900', color: '#0f172a', letterSpacing: '1px', lineHeight: '1' }}>
+            Recognition <span style={{color: '#2563eb'}}>Live</span>
+          </div>
+          
+          {/* קו מפריד */}
+          <div style={{ height: '35px', width: '2px', backgroundColor: '#e2e8f0' }}></div>
+          
+          {/* שם המערכת */}
+          <div><p style={{ margin: '0', color: '#64748b', fontSize: '18px', fontWeight: 'bold' }}>מערכת שליטה ובקרה ארצית</p></div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <div style={{ textAlign: 'left' }}><span style={{ display: 'block', fontWeight: 'bold', color: '#1f2937', fontSize: '16px' }}>{currentUser}</span></div>
           <button onClick={() => { sessionStorage.clear(); navigate('/'); }} style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold' }}>יציאה ➜</button>
         </div>
@@ -245,8 +294,22 @@ const AdminPanel: React.FC = () => {
         {/* טבלת מבוטחים */}
         <div style={{ backgroundColor: 'white', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', height: '500px', overflowY: 'auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #f3f4f6', paddingBottom: '15px', marginBottom: '15px' }}>
-             <h3 style={{ margin: 0 }}>👥 מבוטחים ({patients.length})</h3>
-             <button onClick={handleAddPatient} style={{ background: '#2563eb', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(37, 99, 235, 0.3)' }}>➕ הוסף מבוטח</button>
+             <h3 style={{ margin: 0 }}>👥 מבוטחים ({filteredPatients.length})</h3>
+             
+             <div style={{ display: 'flex', gap: '10px', flex: 1, justifyContent: 'flex-end', marginLeft: '20px' }}>
+                <input 
+                    type="text" 
+                    placeholder="🔍 חפש לפי שם, ת''ז או צמיד..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ccc', width: '250px' }}
+                />
+             </div>
+
+             <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={exportToCSV} style={{ background: '#059669', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(5, 150, 105, 0.3)' }}>📊 ייצוא נתונים</button>
+                <button onClick={handleAddPatient} style={{ background: '#2563eb', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(37, 99, 235, 0.3)' }}>➕ הוסף מבוטח</button>
+             </div>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -255,10 +318,11 @@ const AdminPanel: React.FC = () => {
                 <th style={{ padding: '15px' }}>מחוז</th>
                 <th style={{ padding: '15px' }}>שם מלא</th>
                 <th style={{ padding: '15px' }}>טלפון</th>
+                <th style={{ padding: '15px' }}>מספר צמיד</th>
               </tr>
             </thead>
             <tbody>
-              {patients.map((p) => (
+              {filteredPatients.map((p) => (
                 <tr key={p.id} style={{ borderBottom: '1px solid #f9f9f9' }}>
                   <td style={{ padding: '10px', display: 'flex', gap: '10px' }}>
                     {accessLevel === 'master' && (
@@ -268,13 +332,12 @@ const AdminPanel: React.FC = () => {
                   </td>
                   <td style={{ padding: '10px' }}>
                     <span style={{ padding: '5px 12px', borderRadius: '20px', backgroundColor: '#e3f2fd', color: '#1976d2', fontSize: '12px', fontWeight: 'bold' }}>
-                      {p.district === 'center' ? 'מרכז' : 
-                       p.district === 'north' ? 'צפון' : 
-                       p.district === 'south' ? 'דרום' : p.district}
+                      {p.district === 'center' ? 'מרכז' : p.district === 'north' ? 'צפון' : p.district === 'south' ? 'דרום' : p.district}
                     </span>
                   </td>
                   <td style={{ padding: '10px', fontWeight: 'bold', fontSize: '15px', color: '#333' }}>{p.fullName || '---'}</td>
                   <td style={{ padding: '10px', color: '#666' }}>{p.personalPhone}</td>
+                  <td style={{ padding: '10px', fontWeight: 'bold' }}>{p.braceletId}</td>
                 </tr>
               ))}
             </tbody>
@@ -285,23 +348,31 @@ const AdminPanel: React.FC = () => {
         <div style={{ backgroundColor: 'white', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', height: '500px', overflowY: 'auto' }}>
           <h3 style={{ marginTop: 0, borderBottom: '2px solid #f3f4f6', paddingBottom: '15px' }}>📡 סריקות אחרונות</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            {scanFeed.length === 0 ? (<p style={{color: '#999', textAlign: 'center'}}>אין סריקות ב-24 שעות האחרונות</p>) : scanFeed.map((log) => (
-              <div key={log.id} style={{ padding: '15px', borderRadius: '10px', backgroundColor: log.action.includes('FAIL') ? '#fef2f2' : '#f0f9ff', borderRight: log.action.includes('FAIL') ? '4px solid #ef4444' : '4px solid #0ea5e9' }}>
-                <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#374151' }}>
-                    {log.action === 'SCAN' ? '✅ סריקה' : '⚠️ שגיאה'}
-                    {log.location && <span style={{fontSize: '10px', marginRight: '5px', background: '#ecfdf5', color: '#059669', padding: '2px 5px', borderRadius: '4px', float: 'left'}}>📡 GPS</span>}
-                </div>
-                <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '5px' }}>{log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : '---'}</div>
-                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0d6efd', marginTop: '5px' }}>{log.details}</div>
-              </div>
-            ))}
+            {scanFeed.length === 0 ? (<p style={{color: '#999', textAlign: 'center'}}>אין סריקות ב-24 שעות האחרונות</p>) : scanFeed.map((log) => {
+               const status = getEventStatus(log, logs);
+               return (
+                  <div key={log.id} style={{ padding: '15px', borderRadius: '10px', backgroundColor: log.action.includes('FAIL') ? '#fef2f2' : '#f0f9ff', borderRight: `4px solid ${log.action.includes('FAIL') ? '#ef4444' : status.color}` }}>
+                    <div style={{ fontWeight: 'bold', fontSize: '14px', color: '#374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>{log.action === 'SCAN' ? '✅ סריקה' : '⚠️ שגיאה'}</span>
+                        <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: status.color }} title={status.label}></div>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '5px' }}>{log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : '---'}</div>
+                    <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0d6efd', marginTop: '5px' }}>{log.details}</div>
+                    {log.outcome && <div style={{ fontSize: '12px', color: '#059669', marginTop: '3px', fontWeight: 'bold' }}>{log.outcome === 'calmed_down' ? 'הרגעה' : log.outcome} ({log.duration_text})</div>}
+                  </div>
+               );
+            })}
           </div>
         </div>
       </div>
 
-      {/* מפת תקריות */}
       <div style={{ backgroundColor: 'white', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-        <h3 style={{ margin: '0 0 15px 0' }}>🗺️ מפת תקריות (30 ימים אחרונים)</h3>
+        <h3 style={{ margin: '0 0 15px 0' }}>🗺️ מפת תקריות (24 שעות אחרונות)</h3>
+        <div style={{ display: 'flex', gap: '15px', marginBottom: '10px', fontSize: '14px' }}>
+            <div style={{display:'flex', alignItems:'center', gap:'5px'}}><div style={{width:10, height:10, borderRadius:'50%', background:'#ef4444'}}></div> פתוח</div>
+            <div style={{display:'flex', alignItems:'center', gap:'5px'}}><div style={{width:10, height:10, borderRadius:'50%', background:'#10b981'}}></div> סגור</div>
+            <div style={{display:'flex', alignItems:'center', gap:'5px'}}><div style={{width:10, height:10, borderRadius:'50%', background:'#9ca3af'}}></div> לבירור</div>
+        </div>
         <div style={{ height: '400px', borderRadius: '10px', overflow: 'hidden' }}>
           <MapContainer center={[32.0853, 34.7818]} zoom={8} style={{ height: '100%', width: '100%' }}>
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
@@ -310,19 +381,20 @@ const AdminPanel: React.FC = () => {
                 key={item.id} 
                 center={item.pos} 
                 pathOptions={{ 
-                    // צבע ירוק ל-GPS אמיתי, אדום לגיבוי
-                    color: item.isGps ? '#059669' : 'red', 
-                    fillColor: item.isGps ? '#10b981' : '#f03', 
-                    fillOpacity: 0.7 
+                    color: item.statusColor, 
+                    fillColor: item.statusColor, 
+                    fillOpacity: 0.8 
                 }} 
-                radius={item.isGps ? 12 : 8} // נקודת GPS קצת יותר גדולה
+                radius={item.isGps ? 12 : 8}
               >
                 <Tooltip direction="top" offset={[0, -10]} opacity={1} permanent>{item.fullName}</Tooltip>
                 <Popup>
                     <strong>{item.fullName}</strong><br/>
                     צמיד: {item.braceletId}<br/>
-                    נסרק ב: {item.scanTime?.toLocaleString()}<br/>
-                    {item.isGps ? <span style={{color: '#059669', fontWeight: 'bold'}}>📡 מיקום מדויק (GPS)</span> : <span style={{color: '#ef4444'}}>📍 מיקום משוער (מחוז)</span>}
+                    <div style={{display:'flex', alignItems:'center', gap:'5px', marginTop:'5px'}}>
+                        סטטוס: <div style={{width:10, height:10, borderRadius:'50%', background: item.statusColor}}></div>
+                    </div>
+                    {item.isGps && <span style={{fontSize: '11px', color: '#059669'}}>📡 מיקום GPS</span>}
                 </Popup>
               </CircleMarker>
             ))}
@@ -330,10 +402,9 @@ const AdminPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* מודל עריכה נשאר זהה */}
       {editingPatient && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
-          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '15px', width: '400px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'right' }}>
+            <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '15px', width: '400px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'right' }}>
             <h3 style={{color: '#2c3e50', textAlign: 'center', marginBottom: '25px', fontSize: '22px'}}>עריכה מלאה:</h3>
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>שם מלא:</label>
             <input type="text" value={editForm.fullName} onChange={e => setEditForm({...editForm, fullName: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px'}} />

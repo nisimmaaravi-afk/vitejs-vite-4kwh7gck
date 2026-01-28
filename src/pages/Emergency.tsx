@@ -1,19 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 export default function Emergency({ tagId }: { tagId: string }) {
   const [patient, setPatient] = useState<any>(null);
-  
-  // נעילת מידע רפואי
   const [isMedicalUnlocked, setIsMedicalUnlocked] = useState(false);
   const [inputCode, setInputCode] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // ניהול סיום אירוע
   const [showReportForm, setShowReportForm] = useState(false);
   const [reportData, setReportData] = useState({ outcome: 'calmed_down', notes: '' });
   const [reportSubmitted, setReportSubmitted] = useState(false);
+  
+  // שומרים את זמן הטעינה הראשוני ברכיב זיכרון שלא משתנה
+  const startTimeRef = useRef(Date.now());
 
   useEffect(() => {
     const fetchPatient = async () => {
@@ -22,21 +22,48 @@ export default function Emergency({ tagId }: { tagId: string }) {
       if (docSnap.exists()) setPatient(docSnap.data());
     };
     fetchPatient();
-  }, [tagId]);
+
+    // --- הפתרון לבעיית המסך הסגור ---
+    const checkTimeElapsed = () => {
+        if (reportSubmitted) return; // אם כבר דווח, לא רלוונטי
+
+        const now = Date.now();
+        const elapsed = now - startTimeRef.current;
+        const ONE_HOUR = 3600000; // 60 דקות במילישניות
+
+        if (elapsed >= ONE_HOUR) {
+            setShowReportForm(true);
+        }
+    };
+
+    // 1. בדיקה מחזורית כל דקה (למקרה שהמסך דולק רצוף)
+    const interval = setInterval(checkTimeElapsed, 60000);
+
+    // 2. בדיקת "יקיצה" - קורית ברגע שהמשתמש פותח מסך או חוזר לטאב
+    const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+            checkTimeElapsed(); // בודק מיד כשחוזרים
+        }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+        clearInterval(interval);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [tagId, reportSubmitted]);
 
   const handleUnlock = () => {
     if (inputCode === '1010') {
       setIsMedicalUnlocked(true);
       setErrorMsg('');
       
-      // לוג: תיעוד שמישהו פתח את המידע הרפואי (נקודת דאטה חשובה)
       addDoc(collection(db, 'system_logs'), {
         action: 'MEDICAL_UNLOCK',
         details: tagId,
         timestamp: serverTimestamp(),
         user: 'Scanner'
       });
-
     } else {
       setErrorMsg('קוד שגוי');
       setInputCode('');
@@ -46,10 +73,10 @@ export default function Emergency({ tagId }: { tagId: string }) {
   const submitReport = async () => {
     try {
       await addDoc(collection(db, 'system_logs'), {
-        action: 'EVENT_RESOLVED', // סוג אירוע חדש: סיום טיפול
+        action: 'EVENT_RESOLVED', 
         details: tagId,
-        outcome: reportData.outcome, // מה קרה בסוף?
-        notes: reportData.notes,     // הערות מילוליות
+        outcome: reportData.outcome,
+        notes: reportData.notes,
         timestamp: serverTimestamp(),
         user: 'Scanner'
       });
@@ -62,7 +89,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
 
   if (!patient) return <div style={{textAlign:'center', marginTop: 50, fontFamily: 'Segoe UI, sans-serif'}}>טוען נתונים...</div>;
 
-  // --- מסך תודה לאחר דיווח ---
   if (reportSubmitted) {
     return (
       <div style={{ minHeight: '100vh', background: 'linear-gradient(180deg, #e0f2fe 0%, #bae6fd 100%)', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'Segoe UI, sans-serif', direction: 'rtl' }}>
@@ -83,11 +109,16 @@ export default function Emergency({ tagId }: { tagId: string }) {
         Recognition <span style={{color: '#2563eb'}}>Live</span>
       </h1>
 
-      {/* אם המשתמש לחץ על סיום אירוע - מציגים את הטופס */}
       {showReportForm ? (
-        <div style={{ backgroundColor: 'white', borderRadius: '25px', padding: '30px', width: '100%', maxWidth: '380px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-          <h3 style={{ marginTop: 0, color: '#0f172a', textAlign: 'center' }}>📝 סיכום אירוע</h3>
-          <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '20px' }}>המידע הזה קריטי לשיפור השירות בעתיד.</p>
+        <div style={{ backgroundColor: 'white', borderRadius: '25px', padding: '30px', width: '100%', maxWidth: '380px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)', position: 'relative', zIndex: 10, border: '2px solid #2563eb' }}>
+          
+          <button 
+             onClick={() => setShowReportForm(false)} 
+             style={{position: 'absolute', top: '10px', left: '10px', background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer'}}
+          >✖</button>
+
+          <h3 style={{ marginTop: 0, color: '#0f172a', textAlign: 'center' }}>📝 האם האירוע הסתיים?</h3>
+          <p style={{ fontSize: '14px', color: '#64748b', textAlign: 'center', marginBottom: '20px' }}>עבר זמן מה מתחילת האירוע.</p>
           
           <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '5px', color: '#334155' }}>כיצד הסתיים האירוע?</label>
           <select 
@@ -98,7 +129,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
             <option value="calmed_down">✅ הרגעה במקום (ללא פינוי)</option>
             <option value="family_arrived">👨‍👩‍👧‍👦 הגעת בן משפחה/מכר</option>
             <option value="ambulance">🚑 פינוי באמבולנס</option>
-            <option value="police">police משטרה / גורמי ביטחון</option>
+            <option value="police">🚓 משטרה / גורמי ביטחון</option>
             <option value="refused_help">❌ סירב לקבל עזרה</option>
           </select>
 
@@ -112,12 +143,10 @@ export default function Emergency({ tagId }: { tagId: string }) {
           />
 
           <div style={{ display: 'flex', gap: '10px' }}>
-             <button onClick={() => setShowReportForm(false)} style={{ flex: 1, padding: '12px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>ביטול</button>
-             <button onClick={submitReport} style={{ flex: 1, padding: '12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' }}>שלח דיווח</button>
+             <button onClick={submitReport} style={{ flex: 1, padding: '12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>שלח וסיים</button>
           </div>
         </div>
       ) : (
-        // --- המסך הרגיל (חירום) ---
         <div style={{ backgroundColor: 'white', borderRadius: '25px', padding: '0', width: '100%', maxWidth: '380px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)', overflow: 'hidden' }}>
             
             <div style={{ backgroundColor: '#fee2e2', padding: '20px', textAlign: 'center', borderBottom: '1px solid #fecaca' }}>
@@ -130,7 +159,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
             </div>
 
             <div style={{ padding: '25px' }}>
-                
                 <div style={{ backgroundColor: '#1e293b', color: 'white', padding: '20px', borderRadius: '15px', marginBottom: '25px', textAlign: 'right', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
                 <h3 style={{ margin: '0 0 12px 0', borderBottom: '1px solid #475569', paddingBottom: '10px', color: '#fbbf24', fontSize: '18px', fontWeight: 'bold' }}>
                     🛑 פרוטוקול טיפול (חובה):
@@ -207,7 +235,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
                 </div>
             </div>
 
-            {/* כפתור סיום אירוע בתחתית */}
             <div style={{ padding: '15px', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
                 <button 
                   onClick={() => setShowReportForm(true)}
