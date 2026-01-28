@@ -9,6 +9,8 @@ export default function Register({ tagId }: { tagId: string }) {
   const [formData, setFormData] = useState({
     fullName: '', 
     idNumber: '', 
+    city: '',
+    district: '',
     patientPhone: '', 
     emergencyPhone: '', 
     notes: ''
@@ -38,9 +40,11 @@ export default function Register({ tagId }: { tagId: string }) {
     return isValid;
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
-    setErrors({ ...errors, [e.target.name === 'patientPhone' ? 'phone' : e.target.name === 'emergencyPhone' ? 'emergency' : 'id']: '' });
+    if (e.target.name === 'patientPhone') setErrors({ ...errors, phone: '' });
+    if (e.target.name === 'emergencyPhone') setErrors({ ...errors, emergency: '' });
+    if (e.target.name === 'idNumber') setErrors({ ...errors, id: '' });
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -55,7 +59,6 @@ export default function Register({ tagId }: { tagId: string }) {
         createdAt: new Date(),
         firstName: formData.fullName.split(' ')[0], 
         lastName: formData.fullName.split(' ').slice(1).join(' ') || '',
-        city: 'לא צוין'
       });
       window.location.href = `/?bid=${tagId}`;
     } catch (error) {
@@ -66,7 +69,7 @@ export default function Register({ tagId }: { tagId: string }) {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'linear-gradient(180deg, #e0f2fe 0%, #bae6fd 100%)', direction: 'rtl', fontFamily: 'Segoe UI, sans-serif' }}>
-      <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '25px', width: '90%', maxWidth: '380px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', position: 'relative', marginTop: '30px' }}>
+      <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '25px', width: '90%', maxWidth: '380px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', position: 'relative', marginTop: '30px', marginBottom: '30px' }}>
         
         <div style={{ position: 'absolute', top: '-40px', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
             <div style={{ width: '80px', height: '80px', backgroundColor: 'black', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', border: '4px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
@@ -87,6 +90,23 @@ export default function Register({ tagId }: { tagId: string }) {
                 <label style={labelStyle}>תעודת זהות:</label>
                 <input type="tel" name="idNumber" placeholder="מספר ת.ז (9 ספרות)" maxLength={9} onChange={handleChange} style={errors.id ? errorInputStyle : inputStyle} />
                 {errors.id && <span style={errorTextStyle}>{errors.id}</span>}
+            </div>
+
+            {/* בחירת עיר ומחוז - רק 3 אפשרויות */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div>
+                    <label style={labelStyle}>עיר מגורים:</label>
+                    <input type="text" name="city" placeholder="שם העיר" onChange={handleChange} required style={inputStyle} />
+                </div>
+                <div>
+                    <label style={labelStyle}>מחוז:</label>
+                    <select name="district" onChange={handleChange} required style={{...inputStyle, appearance: 'none', backgroundImage: 'none'}}>
+                        <option value="">בחר...</option>
+                        <option value="center">מרכז</option>
+                        <option value="north">צפון</option>
+                        <option value="south">דרום</option>
+                    </select>
+                </div>
             </div>
 
             <div>

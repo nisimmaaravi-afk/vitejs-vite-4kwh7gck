@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// פונקציית עזר ללוגים
 const logAction = async (user: string, action: string, details: string) => {
   console.log(`[LOG] ${user}: ${action} - ${details}`);
 };
@@ -28,13 +27,10 @@ interface Patient {
 
 const AdminPanel: React.FC = () => {
   const navigate = useNavigate();
-  
-  // חיבור למנגנון הלוגין
   const isAdmin = sessionStorage.getItem('isAdmin');
   const accessLevel = sessionStorage.getItem('userRole');
   const currentUser = isAdmin ? (accessLevel === 'master' ? 'Master Admin' : 'Admin') : null;
 
-  // State
   const [patients, setPatients] = useState<Patient[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [scanFeed, setScanFeed] = useState<any[]>([]);
@@ -45,11 +41,11 @@ const AdminPanel: React.FC = () => {
     fullName: '', braceletId: '', district: '', phone: '', history: '' 
   });
 
+  // --- חזרנו ל-3 מחוזות בלבד ---
   const districtsCoords: { [key: string]: [number, number] } = {
     'north': [32.8, 35.3],
     'center': [32.08, 34.78],
     'south': [31.25, 34.8],
-    'jerusalem': [31.76, 35.21],
     'default': [31.4, 35.0]
   };
 
@@ -65,7 +61,6 @@ const AdminPanel: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      // טעינת מבוטחים מאוסף users
       const patSnap = await getDocs(collection(db, 'users')); 
       const patList = patSnap.docs.map(doc => {
         const data = doc.data();
@@ -76,12 +71,11 @@ const AdminPanel: React.FC = () => {
           braceletId: data.tagId || doc.id,
           medicalHistory: data.notes || data.medicalHistory || '',
           personalPhone: data.patientPhone || data.phone || '',
-          district: data.city || data.district || 'כללי'
+          district: data.district || data.city || 'כללי'
         } as Patient;
       });
       setPatients(patList);
 
-      // לוגים וסטטיסטיקה
       try {
         const q = query(collection(db, 'system_logs'), orderBy('timestamp', 'desc'), limit(100));
         const logSnap = await getDocs(q);
@@ -100,17 +94,14 @@ const AdminPanel: React.FC = () => {
           console.log("No logs collection found yet");
           setStats(prev => ({ ...prev, month: patList.length }));
       }
-
     } catch (error) {
       console.error("Error loading data:", error);
     }
   };
 
-  // --- הפונקציה להוספת מבוטח ידנית ---
   const handleAddPatient = () => {
     const id = prompt("הכנס מספר צמיד חדש (למשל: 1002):");
     if (id && id.trim().length > 0) {
-      // מעבר ישיר לרישום עם המספר שהוזן
       window.location.href = `/?bid=${id}`;
     }
   };
@@ -132,8 +123,18 @@ const AdminPanel: React.FC = () => {
 
   const getPosition = (district: string): [number, number] => {
     const safeDistrict = String(district || 'default').toLowerCase();
-    if (safeDistrict.includes('tel aviv') || safeDistrict.includes('תל אביב')) return districtsCoords['center'];
-    const base = districtsCoords[safeDistrict] || districtsCoords['default'];
+    
+    // אם המחוז מוכר (צפון, דרום, מרכז)
+    if (districtsCoords[safeDistrict]) {
+        const base = districtsCoords[safeDistrict];
+        return [base[0] + (Math.random() * 0.04 - 0.02), base[1] + (Math.random() * 0.04 - 0.02)];
+    }
+
+    // תאימות לאחור: אם בטעות יש 'ירושלים' או 'יו"ש', נזרוק אותם למרכז כדי שיופיעו במפה
+    if (safeDistrict.includes('jerusalem') || safeDistrict.includes('judea')) return districtsCoords['center'];
+
+    // ברירת מחדל
+    const base = districtsCoords['default'];
     return [base[0] + (Math.random() * 0.04 - 0.02), base[1] + (Math.random() * 0.04 - 0.02)];
   };
 
@@ -179,7 +180,7 @@ const AdminPanel: React.FC = () => {
       await updateDoc(doc(db, 'users', editingPatient.id), { 
         fullName: editForm.fullName, 
         tagId: editForm.braceletId, 
-        city: editForm.district, 
+        district: editForm.district,
         patientPhone: editForm.phone, 
         notes: editForm.history 
       });
@@ -237,7 +238,6 @@ const AdminPanel: React.FC = () => {
         <div style={{ backgroundColor: 'white', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', height: '500px', overflowY: 'auto' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #f3f4f6', paddingBottom: '15px', marginBottom: '15px' }}>
              <h3 style={{ margin: 0 }}>👥 מבוטחים ({patients.length})</h3>
-             {/* הכפתור החדש שלך */}
              <button onClick={handleAddPatient} style={{ background: '#2563eb', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(37, 99, 235, 0.3)' }}>➕ הוסף מבוטח</button>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -258,7 +258,13 @@ const AdminPanel: React.FC = () => {
                     )}
                     <button onClick={() => startEdit(p)} style={{ ...btnIconStyle, background: 'white', color: '#555' }} title="ערוך">✏️</button>
                   </td>
-                  <td style={{ padding: '10px' }}><span style={{ padding: '5px 12px', borderRadius: '20px', backgroundColor: '#e3f2fd', color: '#1976d2', fontSize: '12px', fontWeight: 'bold' }}>{p.district}</span></td>
+                  <td style={{ padding: '10px' }}>
+                    <span style={{ padding: '5px 12px', borderRadius: '20px', backgroundColor: '#e3f2fd', color: '#1976d2', fontSize: '12px', fontWeight: 'bold' }}>
+                      {p.district === 'center' ? 'מרכז' : 
+                       p.district === 'north' ? 'צפון' : 
+                       p.district === 'south' ? 'דרום' : p.district}
+                    </span>
+                  </td>
                   <td style={{ padding: '10px', fontWeight: 'bold', fontSize: '15px', color: '#333' }}>{p.fullName || '---'}</td>
                   <td style={{ padding: '10px', color: '#666' }}>{p.personalPhone}</td>
                 </tr>
@@ -307,8 +313,14 @@ const AdminPanel: React.FC = () => {
             <input type="text" value={editForm.fullName} onChange={e => setEditForm({...editForm, fullName: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px'}} />
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>מספר צמיד:</label>
             <input type="text" value={editForm.braceletId} onChange={e => setEditForm({...editForm, braceletId: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px'}} />
-            <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>מחוז (north/center/south):</label>
-            <input type="text" value={editForm.district} onChange={e => setEditForm({...editForm, district: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px'}} />
+            
+            <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>מחוז:</label>
+            <select value={editForm.district} onChange={e => setEditForm({...editForm, district: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px', background: 'white'}}>
+                <option value="center">מרכז</option>
+                <option value="north">צפון</option>
+                <option value="south">דרום</option>
+            </select>
+            
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>טלפון:</label>
             <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '8px'}} />
             <label style={{fontSize: '14px', fontWeight: 'bold', color: '#333'}}>מידע רפואי:</label>

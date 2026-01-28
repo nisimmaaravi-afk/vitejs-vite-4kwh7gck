@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './services/firebase';
 
 import Login from './pages/Login';
@@ -9,12 +9,12 @@ import Emergency from './pages/Emergency';
 import Register from './pages/Register';
 
 function App() {
-  // שינוי קריטי: אנחנו קוראים את הכתובת ישירות מהדפדפן, לא דרך הראוטר
-  // זה מבטיח שאף אחד לא יפספס את ה-bid
+  // קריאת הפרמטר ישירות מה-URL
   const queryParams = new URLSearchParams(window.location.search);
   const bid = queryParams.get('bid'); 
-
+  
   const [isValidTag, setIsValidTag] = useState<boolean | null>(null);
+  const hasLogged = useRef(false); // מונע כתיבה כפולה של אותו לוג
 
   useEffect(() => {
     async function checkTag() {
@@ -23,7 +23,23 @@ function App() {
       try {
         const docRef = doc(db, "users", bid);
         const docSnap = await getDoc(docRef);
-        setIsValidTag(docSnap.exists());
+        const exists = docSnap.exists();
+        
+        setIsValidTag(exists);
+
+        // --- התיקון: דיווח על הסריקה למסד הנתונים ---
+        if (exists && !hasLogged.current) {
+          hasLogged.current = true; // סימון שדיווחנו כדי לא לשכפל
+          await addDoc(collection(db, 'system_logs'), {
+            action: 'SCAN',
+            details: bid, // שומרים את מספר הצמיד שנסרק
+            timestamp: serverTimestamp(), // שומרים את הזמן המדויק
+            user: 'System'
+          });
+          console.log("Scan logged successfully");
+        }
+        // -------------------------------------------
+
       } catch (error) {
         console.error("Error verifying tag:", error);
         setIsValidTag(false);
@@ -33,7 +49,7 @@ function App() {
   }, [bid]);
 
   // ============================================
-  // מחסום ברזל: אם יש bid בשורת הכתובת - המערכת נעולה עליו
+  // מחסום ברזל: אם יש מספר צמיד - המערכת נעולה עליו
   // ============================================
   if (bid) {
     // 1. שלב טעינה
@@ -51,7 +67,7 @@ function App() {
   }
 
   // ============================================
-  // רק אם ה-bid ריק לגמרי - תציג את המנהל
+  // רק אם ה-bid ריק - תציג את המנהל
   // ============================================
   return (
     <Routes>
