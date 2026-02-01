@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"; // הוספנו את זה
 
 export default function Register({ tagId }: { tagId: string }) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ phone: '', id: '', emergency: '' });
   
+  // הוספת סטייט לתמונה
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   const [formData, setFormData] = useState({
     fullName: '', 
     idNumber: '', 
@@ -47,21 +52,43 @@ export default function Register({ tagId }: { tagId: string }) {
     if (e.target.name === 'idNumber') setErrors({ ...errors, id: '' });
   };
 
+  // פונקציה חדשה לטיפול בבחירת תמונה
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setImageFile(file);
+      setPreviewUrl(URL.createObjectURL(file)); // יצירת תצוגה מקדימה
+    }
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateInput()) return;
 
     setLoading(true);
     try {
+      let photoURL = "";
+
+      // 1. העלאת תמונה אם נבחרה
+      if (imageFile) {
+        const storage = getStorage();
+        const storageRef = ref(storage, `patients/${tagId}/profile_${Date.now()}`);
+        const snapshot = await uploadBytes(storageRef, imageFile);
+        photoURL = await getDownloadURL(snapshot.ref);
+      }
+
+      // 2. שמירת הנתונים ב-Firestore יחד עם ה-URL של התמונה
       await setDoc(doc(db, "users", tagId), {
         ...formData,
         tagId: tagId,
+        photoURL: photoURL, // הוספת הקישור לתמונה
         createdAt: new Date(),
         firstName: formData.fullName.split(' ')[0], 
         lastName: formData.fullName.split(' ').slice(1).join(' ') || '',
       });
       window.location.href = `/?bid=${tagId}`;
     } catch (error) {
+      console.error("Error registering:", error);
       alert("שגיאה בשמירה, נסה שוב.");
       setLoading(false);
     }
@@ -71,11 +98,26 @@ export default function Register({ tagId }: { tagId: string }) {
     <div style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'linear-gradient(180deg, #e0f2fe 0%, #bae6fd 100%)', direction: 'rtl', fontFamily: 'Segoe UI, sans-serif' }}>
       <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '25px', width: '90%', maxWidth: '380px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', position: 'relative', marginTop: '30px', marginBottom: '30px' }}>
         
+        {/* שינינו את ה-div ל-label כדי לאפשר לחיצה */}
         <div style={{ position: 'absolute', top: '-40px', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
-            <div style={{ width: '80px', height: '80px', backgroundColor: 'black', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', border: '4px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-            </div>
-            <div style={{ background: '#e0f2fe', padding: '4px 12px', borderRadius: '15px', color: '#0284c7', fontSize: '12px', fontWeight: 'bold', marginTop: '-10px', position: 'relative', display: 'inline-block', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>📷 הוסף תמונה</div>
+            <label style={{ cursor: 'pointer' }}>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleImageChange} 
+                  style={{ display: 'none' }} 
+                />
+                <div style={{ width: '80px', height: '80px', backgroundColor: 'black', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', border: '4px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+                    {previewUrl ? (
+                      <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="white"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    )}
+                </div>
+                <div style={{ background: '#e0f2fe', padding: '4px 12px', borderRadius: '15px', color: '#0284c7', fontSize: '12px', fontWeight: 'bold', marginTop: '-10px', position: 'relative', display: 'inline-block', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                  {previewUrl ? '📸 שנה תמונה' : '📷 הוסף תמונה'}
+                </div>
+            </label>
         </div>
 
         <div style={{ marginTop: '40px' }}>
