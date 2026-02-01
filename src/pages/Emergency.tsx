@@ -195,7 +195,30 @@ export default function Emergency({ tagId }: { tagId: string }) {
                 </button>
                 </a>
 
+                {/* --- הוספנו כאן את תמונת המטופל --- */}
                 <div style={{ textAlign: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
+                    
+                    {/* המיכל של התמונה */}
+                    <div style={{ 
+                        width: '120px', 
+                        height: '120px', 
+                        margin: '0 auto 15px auto', 
+                        borderRadius: '50%', 
+                        overflow: 'hidden', 
+                        border: '4px solid white', 
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                        backgroundColor: '#cbd5e1',
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center'
+                    }}>
+                        {patient.photoURL ? (
+                            <img src={patient.photoURL} alt="Patient" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                            <span style={{ fontSize: '40px' }}>👤</span>
+                        )}
+                    </div>
+
                     <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginBottom: '5px' }}>
                         {patient.fullName || patient.firstName + ' ' + patient.lastName}
                     </div>
