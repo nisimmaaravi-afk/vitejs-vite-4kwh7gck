@@ -38,7 +38,6 @@ const AdminPanel: React.FC = () => {
   const [stats, setStats] = useState({ today: 0, week: 0, month: 0 });
   
   const [searchTerm, setSearchTerm] = useState('');
-
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [editForm, setEditForm] = useState({ 
     fullName: '', braceletId: '', district: '', phone: '', history: '' 
@@ -94,11 +93,161 @@ const AdminPanel: React.FC = () => {
         });
       } catch (e) {
           console.log("No logs collection found yet");
-          setStats(prev => ({ ...prev, month: patList.length }));
       }
     } catch (error) {
       console.error("Error loading data:", error);
     }
+  };
+
+  const formatDurationFriendly = (start: Date, end: Date) => {
+    const diffMs = end.getTime() - start.getTime();
+    const totalMinutes = Math.floor(diffMs / 60000);
+
+    if (totalMinutes < 1) return "פחות מדקה";
+    if (totalMinutes < 60) return `${totalMinutes} דקות`;
+    
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (minutes === 0) return `${hours} שעות עגולות`;
+    return `${hours} שעות ו-${minutes} דקות`;
+  };
+
+  // --- מנוע הייצוא הסופי ---
+  const exportToCSV = () => {
+    let csvContent = "תאריך,שעת סריקה ראשונית,שעת סגירת אירוע,משך אירוע,מספר צמיד,מספר סריקות,תוצאת האירוע,הערות צוות\n";
+
+    const clean = (text: any) => (text || '').toString().replace(/,/g, ' ').replace(/\n/g, ' ').trim();
+    const MS_IN_24H = 24 * 60 * 60 * 1000;
+
+    const chronologicalLogs = [...logs].sort((a, b) => {
+        const tA = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : 0;
+        const tB = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : 0;
+        return tA - tB;
+    });
+
+    const activeSessions: { [key: string]: any } = {}; 
+    const completedSessions: any[] = []; 
+
+    chronologicalLogs.forEach(log => {
+        const bid = log.details;
+        const time = log.timestamp?.toDate ? log.timestamp.toDate() : null;
+        if (!time) return;
+
+        if (log.action === 'SCAN') {
+            if (!activeSessions[bid]) {
+                activeSessions[bid] = {
+                    startDate: time,
+                    bid: bid,
+                    outcome: 'טרם נסגר',
+                    notes: '',
+                    endDate: null,
+                    scanCount: 1
+                };
+            } else {
+                const elapsed = time.getTime() - activeSessions[bid].startDate.getTime();
+                
+                if (elapsed > MS_IN_24H) {
+                    const oldSession = activeSessions[bid];
+                    oldSession.outcome = '🔴 לא נסגר (עברו 24 שעות)';
+                    oldSession.endDate = null;
+                    oldSession.forceStopClock = true;
+                    completedSessions.push(oldSession);
+
+                    activeSessions[bid] = {
+                        startDate: time,
+                        bid: bid,
+                        outcome: 'טרם נסגר',
+                        notes: '',
+                        endDate: null,
+                        scanCount: 1
+                    };
+                } else {
+                    activeSessions[bid].scanCount += 1;
+                }
+            }
+        } 
+        else if (log.action === 'EVENT_RESOLVED') {
+            if (activeSessions[bid]) {
+                const session = activeSessions[bid];
+                session.endDate = time;
+                session.outcome = log.outcome;
+                session.notes = log.notes;
+                completedSessions.push(session);
+                delete activeSessions[bid];
+            } else {
+                completedSessions.push({
+                    startDate: time,
+                    endDate: time,
+                    bid: bid,
+                    outcome: log.outcome,
+                    notes: log.notes,
+                    scanCount: 0
+                });
+            }
+        }
+    });
+
+    Object.values(activeSessions).forEach(session => {
+        const now = new Date();
+        const elapsed = now.getTime() - session.startDate.getTime();
+
+        if (elapsed > MS_IN_24H) {
+             session.outcome = '🔴 לא נסגר (עברו 24 שעות)';
+             session.forceStopClock = true;
+        } else {
+             session.outcome = '🔴 אירוע פעיל / לא נסגר';
+             session.forceStopClock = false;
+        }
+        
+        session.endDate = null;
+        completedSessions.push(session);
+    });
+
+    completedSessions.sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+
+    completedSessions.forEach(session => {
+        const dateStr = session.startDate.toLocaleDateString('he-IL');
+        const startTimeStr = session.startDate.toLocaleTimeString('he-IL', {hour: '2-digit', minute:'2-digit'});
+        
+        let endTimeStr = '';
+        let durationStr = '';
+
+        if (session.endDate) {
+            endTimeStr = session.endDate.toLocaleTimeString('he-IL', {hour: '2-digit', minute:'2-digit'});
+            durationStr = formatDurationFriendly(session.startDate, session.endDate);
+        } else {
+            if (session.forceStopClock) {
+                // --- השינוי שביקשת כאן ---
+                durationStr = 'חריגה';
+            } else {
+                const timeRunning = formatDurationFriendly(session.startDate, new Date());
+                durationStr = `רץ כבר ${timeRunning}`;
+            }
+        }
+
+        let outcomeHeb = clean(session.outcome);
+        if (outcomeHeb.includes('calmed')) outcomeHeb = 'הרגעה בשטח';
+        if (outcomeHeb.includes('police')) outcomeHeb = 'טיפול משטרתי';
+        if (outcomeHeb.includes('ambulance')) outcomeHeb = 'פינוי רפואי';
+        if (outcomeHeb.includes('family')) outcomeHeb = 'הגעת בן משפחה';
+        if (outcomeHeb.includes('refused')) outcomeHeb = 'סירוב לקבלת עזרה';
+
+        const notes = clean(session.notes);
+        const count = session.scanCount || 1;
+
+        const row = `${dateStr},${startTimeStr},${endTimeStr},${durationStr},${session.bid},${count},${outcomeHeb},${notes}`;
+        csvContent += row + "\n";
+    });
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `recognition_live_report_${new Date().toLocaleDateString('he-IL').replace(/\./g, '-')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const filteredPatients = patients.filter(p => {
@@ -110,28 +259,6 @@ const AdminPanel: React.FC = () => {
         (p.personalPhone && p.personalPhone.includes(term))
     );
   });
-
-  const exportToCSV = () => {
-    let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "Time,Action,Bracelet ID,Details,Outcome,Duration,Notes\n";
-
-    logs.forEach(log => {
-        const time = log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : '';
-        const outcome = log.outcome || '';
-        const duration = log.duration_text || '';
-        const notes = log.notes ? log.notes.replace(/,/g, ' ') : '';
-        const row = `${time},${log.action},${log.details},${outcome},${duration},${notes}`;
-        csvContent += row + "\n";
-    });
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "recognition_live_data.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   const handleAddPatient = () => {
     const id = prompt("הכנס מספר צמיד חדש (למשל: 1002):");
@@ -261,15 +388,12 @@ const AdminPanel: React.FC = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', backgroundColor: 'white', padding: '15px 25px', borderRadius: '15px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           
-          {/* לוגו טקסטואלי חזק - Recognition Live */}
           <div style={{ fontSize: '26px', fontWeight: '900', color: '#0f172a', letterSpacing: '1px', lineHeight: '1' }}>
             Recognition <span style={{color: '#2563eb'}}>Live</span>
           </div>
           
-          {/* קו מפריד */}
           <div style={{ height: '35px', width: '2px', backgroundColor: '#e2e8f0' }}></div>
           
-          {/* שם המערכת */}
           <div><p style={{ margin: '0', color: '#64748b', fontSize: '18px', fontWeight: 'bold' }}>מערכת שליטה ובקרה ארצית</p></div>
         </div>
 
@@ -307,7 +431,7 @@ const AdminPanel: React.FC = () => {
              </div>
 
              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={exportToCSV} style={{ background: '#059669', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(5, 150, 105, 0.3)' }}>📊 ייצוא נתונים</button>
+                <button onClick={exportToCSV} style={{ background: '#059669', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(5, 150, 105, 0.3)' }}>📊 ייצוא דו"ח מנהלים</button>
                 <button onClick={handleAddPatient} style={{ background: '#2563eb', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', boxShadow: '0 2px 5px rgba(37, 99, 235, 0.3)' }}>➕ הוסף מבוטח</button>
              </div>
           </div>
