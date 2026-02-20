@@ -1,11 +1,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { Shield, CheckCircle, Phone, X, Share2, Heart, VolumeX, Hand, PersonStanding, Moon, BriefcaseMedical, AlertTriangle } from 'lucide-react';
+import { 
+  Phone, Share2, Heart, VolumeX, Hand, PersonStanding, 
+  Moon, BriefcaseMedical, AlertTriangle, X, CheckCircle, Shield 
+} from 'lucide-react';
 
 /**
  * Recognition Live - Official Emergency Module
- * Update: Added branding quote to footer.
+ * מבוסס על העיצוב המקצועי שסיפקת.
  */
 
 interface PatientData {
@@ -21,10 +24,9 @@ interface PatientData {
 
 export default function Emergency({ tagId }: { tagId: string }) {
   const [patient, setPatient] = useState<PatientData | null>(null);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
   const [showReportForm, setShowReportForm] = useState(false);
   const [reportData, setReportData] = useState({ outcome: 'calmed_down', notes: '' });
-  const [reportSubmitted, setReportSubmitted] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
   
   const startTimeRef = useRef(Date.now());
 
@@ -34,42 +36,15 @@ export default function Emergency({ tagId }: { tagId: string }) {
   };
 
   useEffect(() => {
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition((pos) => {
-        setCurrentLocation({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude
-        });
-      }, (err) => console.log("Location access denied"));
-    }
-  }, []);
-
-  useEffect(() => {
     const fetchPatient = async () => {
       if (!tagId) return;
       const docSnap = await getDoc(doc(db, "users", tagId));
       if (docSnap.exists()) setPatient(docSnap.data() as PatientData);
     };
     fetchPatient();
+  }, [tagId]);
 
-    const checkTimeElapsed = () => {
-        if (reportSubmitted) return;
-        const now = Date.now();
-        if (now - startTimeRef.current >= 3600000) setShowReportForm(true);
-    };
-
-    const interval = setInterval(checkTimeElapsed, 60000);
-    const handleVisibilityChange = () => {
-        if (document.visibilityState === 'visible') checkTimeElapsed();
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-        clearInterval(interval);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [tagId, reportSubmitted]);
-
+  // יציאה מאובטחת לאחר 15 שניות
   useEffect(() => {
     if (reportSubmitted) {
       const timer = setTimeout(() => {
@@ -87,7 +62,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
         outcome: reportData.outcome,
         notes: reportData.notes,
         timestamp: serverTimestamp(),
-        location: currentLocation,
         user: 'Scanner'
       });
       setReportSubmitted(true);
@@ -96,231 +70,183 @@ export default function Emergency({ tagId }: { tagId: string }) {
     }
   };
 
-  if (!patient) return <div className="min-h-screen flex items-center justify-center font-sans bg-slate-50">טוען נתונים...</div>;
+  if (!patient) return <div className="flex h-screen items-center justify-center font-sans">טוען נתונים...</div>;
 
   const firstName = getFirstName(patient.fullName || patient.firstName || "");
-  const fullName = patient.fullName || `${patient.firstName} ${patient.lastName}`;
 
+  // --- מסך תודה מעוצב (באותה שפה עיצובית) ---
   if (reportSubmitted) {
     return (
-      <div className="min-h-screen bg-slate-50 font-sans flex flex-col" dir="ltr">
-        <header className="bg-white p-4 flex justify-between items-center border-b border-slate-200">
-          <div className="flex items-center gap-2">
-            <span className="font-black text-blue-600 text-xl tracking-tighter">RECO <span className="text-slate-900">EMERGENCY</span></span>
-          </div>
-        </header>
-
-        <main className="flex-grow flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-8 shadow-lg border border-slate-100 max-w-md w-full text-center animate-in zoom-in duration-500">
-            <div className="mb-6 relative flex justify-center">
-               <div className="bg-green-50 p-4 rounded-full z-10 relative">
-                 <CheckCircle size={80} className="text-green-500 animate-bounce" />
-               </div>
-               <div className="absolute inset-0 bg-green-500/20 rounded-full animate-ping scale-110"></div>
-            </div>
-
-            <h2 className="text-3xl font-black text-slate-900 mb-4">Report Submitted</h2>
-            <p className="text-lg text-slate-600 leading-relaxed mb-8">
-               <span className="font-bold text-slate-900">{firstName}</span> thanks you for your help. The event has been securely closed.
-            </p>
-
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-               <div className="flex items-center justify-center gap-2 text-slate-500 text-sm mb-3">
-                  <Shield size={16} />
-                  <span>Securely clearing data & exiting...</span>
-               </div>
-               <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                  <div className="bg-green-500 h-full animate-progress origin-left"></div>
-               </div>
-            </div>
-          </div>
-        </main>
-        
-        <footer className="p-6 text-center border-t border-slate-200 bg-white">
-          <p className="text-sm font-medium text-slate-600 mb-2 italic" dir="rtl">
-            "פוסט טראומטי היא תווית שלא מבקשים, אבל הכרה היא תווית שכולנו ראויים לה."
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6 text-center" dir="rtl">
+        <div className="bg-white p-10 rounded-[2rem] shadow-xl border border-slate-100 max-w-md w-full animate-in zoom-in">
+          <CheckCircle size={80} className="text-green-500 mx-auto mb-6 animate-bounce" />
+          <h2 className="text-3xl font-black text-slate-900 mb-4">תודה רבה!</h2>
+          <p className="text-lg text-slate-600 mb-8">
+            <span className="font-bold text-slate-900">{firstName}</span> מודה לך מקרב לב על העזרה. האירוע נסגר בבטחה.
           </p>
-          <p className="text-[10px] text-slate-400">© {new Date().getFullYear()} Recognition Live Systems</p>
-        </footer>
-
-        <style>{`
-          @keyframes progress { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
-          .animate-progress { animation: progress 15s linear forwards; }
-        `}</style>
+          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+            <div className="bg-green-500 h-full animate-progress origin-right"></div>
+          </div>
+          <p className="text-xs text-slate-400 mt-4">מנקה נתונים ויוצא בעוד 15 שניות...</p>
+        </div>
+        <style>{`@keyframes progress { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } } .animate-progress { animation: progress 15s linear forwards; }`}</style>
       </div>
     );
   }
 
-  const helpsMeData = [
-    { icon: VolumeX, title: "Talk to me softly", desc: "Keep your voice low and calm, even if I seem distressed." },
-    { icon: Hand, title: "Please don't touch me", desc: "Physical contact can trigger a stronger reaction. Keep distance." },
-    { icon: PersonStanding, title: "Give me 5 feet of space", desc: "Provide personal space unless immediate safety is at risk." },
-    { icon: Moon, title: "Move to a quiet area", desc: "Avoid bright lights or loud sirens if possible." },
-  ];
-
   return (
-    <div className="min-h-screen bg-slate-50 font-sans" dir="ltr">
-      <header className="bg-white p-4 flex justify-between items-center border-b border-slate-200">
+    <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 pb-10" dir="ltr">
+      {/* Header */}
+      <header className="bg-white p-4 flex justify-between items-center border-b border-slate-200 sticky top-0 z-50">
         <div className="flex items-center gap-2">
-          <span className="font-black text-blue-600 text-xl tracking-tighter">RECO <span className="text-slate-900">EMERGENCY</span></span>
-          <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
-            <span className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></span> ACTIVE EMERGENCY MODE
+          <Shield className="text-blue-600" size={24} />
+          <span className="font-black text-lg tracking-tighter">RECO <span className="text-blue-600 uppercase">Emergency</span></span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="bg-red-100 text-red-600 text-[10px] font-black px-2 py-1 rounded-full animate-pulse">
+            ● ACTIVE EMERGENCY MODE
           </span>
         </div>
-        <button onClick={() => setShowReportForm(true)} className="text-slate-400 hover:text-slate-600">
-          <X size={24} />
-        </button>
       </header>
 
-      <main className="max-w-6xl mx-auto p-4 md:p-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-3">
-          <h1 className="text-3xl font-bold text-slate-900">Emergency Profile: {fullName}</h1>
-          <p className="text-slate-500 text-sm flex items-center gap-1">
-            <span className="w-2 h-2 bg-green-500 rounded-full"></span> Last scan: Just now (Location: {patient.city || 'Unknown'})
-          </p>
-        </div>
+      <main className="max-w-4xl mx-auto p-4 md:p-8">
+        <h1 className="text-3xl font-black mb-1">Emergency Profile: {patient.fullName}</h1>
+        <p className="text-slate-400 text-xs mb-8 flex items-center gap-1">
+          🕒 Last scan: {new Date().toLocaleDateString()} (Location: {patient.city || 'Israel'})
+        </p>
 
-        <div className="md:col-span-1 space-y-6">
-          <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100">
-            <div className="h-64 bg-slate-200">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+          
+          {/* Left Side: Image & What Helps */}
+          <div className="md:col-span-5 space-y-6">
+            <div className="relative rounded-[2rem] overflow-hidden shadow-2xl aspect-square bg-slate-200">
               {patient.photoURL ? (
-                <img src={patient.photoURL} alt={fullName} className="w-full h-full object-cover" />
+                <img src={patient.photoURL} alt="Patient" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-400"><span className="text-6xl">👤</span></div>
+                <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold">IMAGE</div>
               )}
+              <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent text-white">
+                <h2 className="text-2xl font-black">{patient.fullName}</h2>
+                <p className="text-xs opacity-80 uppercase font-bold tracking-widest">PTSD Bracelet Carrier</p>
+              </div>
             </div>
-            <div className="p-4 bg-slate-900 text-white">
-              <h2 className="text-xl font-bold">{fullName}</h2>
-              <p className="text-sm opacity-80">PTSD Bracelet Carrier</p>
-            </div>
-          </div>
 
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-            <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2 mb-4">
-              <Heart className="text-blue-500" size={20} /> What helps me
-            </h3>
-            <div className="space-y-3">
-              {helpsMeData.map((item, index) => (
-                <div key={index} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl">
-                  <item.icon className="text-blue-500 shrink-0" size={20} />
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-900">{item.title}</h4>
-                    <p className="text-xs text-slate-500">{item.desc}</p>
+            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
+              <h3 className="font-black text-lg flex items-center gap-2 mb-4 text-blue-600">
+                <Heart size={20} fill="currentColor" /> What helps me
+              </h3>
+              <div className="space-y-3">
+                {[
+                  { icon: VolumeX, t: "Talk to me softly", d: "Keep your voice low and calm." },
+                  { icon: Hand, t: "Please don't touch me", d: "Physical contact can trigger a reaction." },
+                  { icon: PersonStanding, t: "Give me 5 feet of space", d: "Keep distance unless immediate danger." },
+                  { icon: Moon, t: "Move to a quiet area", d: "Avoid bright lights or loud noises." }
+                ].map((item, i) => (
+                  <div key={i} className="flex gap-4 p-4 bg-slate-50 rounded-2xl items-center">
+                    <item.icon className="text-blue-500 shrink-0" size={20} />
+                    <div>
+                      <h4 className="font-bold text-sm">{item.t}</h4>
+                      <p className="text-[11px] text-slate-500">{item.d}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="md:col-span-2 space-y-6">
-          <a href={`tel:${patient.emergencyPhone}`} className="block bg-blue-600 rounded-2xl p-6 text-white shadow-md hover:bg-blue-700 transition-colors relative overflow-hidden group">
-            <div className="relative z-10 flex justify-between items-center">
-              <div>
-                <p className="text-sm opacity-80 mb-1">EMERGENCY CONTACT</p>
-                <h2 className="text-2xl font-bold">Emergency Contact</h2>
-                <p className="text-lg">{patient.emergencyPhone || 'Not provided'}</p>
+                ))}
               </div>
-              <div className="bg-white/20 p-3 rounded-full">
-                <Phone size={24} />
-              </div>
-            </div>
-            <div className="mt-4 text-center font-bold text-sm tracking-wider bg-blue-700/50 py-2 rounded-xl">
-              TAP TO CALL NOW
-            </div>
-          </a>
-
-          <div className="bg-cyan-500 rounded-2xl p-6 text-white shadow-md relative overflow-hidden">
-            <div className="flex justify-between items-center relative z-10">
-              <div>
-                <p className="text-sm opacity-80 mb-1">LIVE TRACKING</p>
-                <h2 className="text-xl font-bold">SHARE REAL-TIME LOCATION</h2>
-                <p className="text-sm">Updates every 30 seconds</p>
-              </div>
-              <div className="bg-white/20 p-3 rounded-full animate-pulse">
-                <Share2 size={24} />
-              </div>
-            </div>
-            <div className="mt-4 text-center font-bold text-sm tracking-wider bg-cyan-600/50 py-2 rounded-xl">
-              LOCATION BROADCAST ACTIVE
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-            <h3 className="font-bold text-lg text-slate-900 flex items-center gap-2 mb-4">
-              <BriefcaseMedical className="text-blue-500" size={20} /> How to help (Responder Protocol)
-            </h3>
-            <div className="space-y-4">
-              <div className="flex gap-4">
-                <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold shrink-0">1</div>
+          {/* Right Side: Actions & Protocol */}
+          <div className="md:col-span-7 space-y-4">
+            
+            {/* Action Buttons */}
+            <a href={`tel:${patient.emergencyPhone}`} className="block bg-blue-600 hover:bg-blue-700 transition-colors rounded-[1.5rem] p-6 text-white shadow-xl shadow-blue-500/20">
+              <div className="flex justify-between items-center mb-4">
                 <div>
-                  <h4 className="font-bold text-slate-900">Stay with me</h4>
-                  <p className="text-sm text-slate-500">Remain present and visible. Do not leave me alone until help arrives or my contact is reached.</p>
+                  <p className="text-[10px] font-black opacity-70 tracking-widest uppercase">Emergency Contact</p>
+                  <h2 className="text-2xl font-black">Call Contact</h2>
                 </div>
+                <div className="bg-white/20 p-3 rounded-full"><Phone size={24} /></div>
               </div>
-              <div className="flex gap-4">
-                <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold shrink-0">2</div>
-                <div>
-                  <h4 className="font-bold text-slate-900">Call and share location</h4>
-                  <p className="text-sm text-slate-500">Inform contact that I'm having a PTSD episode. My location is being shared automatically.</p>
-                </div>
+              <div className="text-center font-black text-xs bg-white/10 py-2 rounded-xl">TAP TO CALL NOW</div>
+            </a>
+
+            <button className="w-full bg-cyan-500 rounded-[1.5rem] p-6 text-white shadow-xl shadow-cyan-500/20 flex justify-between items-center">
+               <div>
+                  <p className="text-[10px] font-black opacity-70 tracking-widest uppercase">Live Tracking</p>
+                  <h2 className="text-xl font-black">Share Location</h2>
+               </div>
+               <div className="bg-white/20 p-3 rounded-full animate-pulse"><Share2 size={24} /></div>
+            </button>
+
+            {/* Protocol Section */}
+            <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 mt-6">
+              <h3 className="font-black text-lg flex items-center gap-2 mb-6">
+                <BriefcaseMedical className="text-blue-600" size={20} /> How to help (Responder Protocol)
+              </h3>
+              <div className="space-y-8">
+                {[
+                  { n: "1", t: "Stay with me", d: "Remain present and visible. Do not leave me alone." },
+                  { n: "2", t: "Call and share location", d: "Inform contact that I'm having a PTSD episode." },
+                  { n: "3", t: "Check for medical ID", d: "Check my phone Health App for allergy info." }
+                ].map((step, i) => (
+                  <div key={i} className="flex gap-6 items-start">
+                    <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-black shrink-0">{step.n}</div>
+                    <div>
+                      <h4 className="font-bold text-slate-900">{step.t}</h4>
+                      <p className="text-sm text-slate-500 leading-relaxed">{step.d}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="flex gap-4">
-                <div className="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold shrink-0">3</div>
+
+              {/* Critical Alert */}
+              <div className="mt-10 bg-red-50 p-5 rounded-2xl border border-red-100 flex gap-4">
+                <AlertTriangle className="text-red-500 shrink-0" size={24} />
                 <div>
-                  <h4 className="font-bold text-slate-900">Check for medical ID</h4>
-                  <p className="text-sm text-slate-500">If I am unresponsive, check for a Medical ID on my smartphone (Health App) for allergy information.</p>
+                  <h4 className="text-red-700 font-black text-sm uppercase">Critical Medical Info</h4>
+                  <p className="text-sm text-slate-800 font-medium mt-1">{patient.notes || 'No critical info provided.'}</p>
                 </div>
               </div>
             </div>
 
-            <div className="mt-6 bg-red-50 p-4 rounded-xl border border-red-100 flex gap-3">
-              <AlertTriangle className="text-red-500 shrink-0" size={24} />
-              <div>
-                <h4 className="font-bold text-red-700">CRITICAL MEDICAL INFO</h4>
-                <p className="text-sm text-slate-700 mt-1 font-medium">{patient.notes || 'No critical medical notes provided.'}</p>
-              </div>
-            </div>
+            <button onClick={() => setShowReportForm(true)} className="w-full py-4 text-slate-400 text-xs font-bold hover:text-slate-900 underline">
+              ✅ Mark event as resolved / End event
+            </button>
           </div>
         </div>
       </main>
 
-      <footer className="p-8 text-center border-t border-slate-200 bg-white">
-        <p className="text-base font-semibold text-slate-700 mb-3 italic" dir="rtl">
+      {/* Footer Quote */}
+      <footer className="mt-12 p-8 border-t border-slate-200 text-center bg-white">
+        <p className="text-lg font-bold text-slate-800 italic mb-4" dir="rtl">
           "פוסט טראומה היא תווית שלא מבקשים, אבל הכרה היא תווית שכולנו ראויים לה."
         </p>
-        <p className="text-xs text-slate-400">Scanned via Recognition Live NFC Bracelet | © {new Date().getFullYear()} Recognition Live Systems</p>
+        <div className="flex justify-center gap-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+           <span>Privacy Policy</span>
+           <span>Terms of Service</span>
+           <span>© 2026 Recognition Live Systems</span>
+        </div>
       </footer>
 
+      {/* Report Form Overlay */}
       {showReportForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" dir="rtl">
-            <div className="bg-white rounded-[25px] p-8 w-full max-w-md shadow-2xl border-2 border-blue-600 relative animate-in slide-in-from-bottom">
-            <button onClick={() => setShowReportForm(false)} className="absolute top-4 left-4 text-slate-400 hover:text-slate-900"><X size={24} /></button>
-            <h3 className="text-slate-900 font-bold text-center text-xl mb-6 tracking-tight">📝 סיכום וסיום אירוע</h3>
-            
-            <label className="font-bold block mb-2 text-slate-700">כיצד הסתיים האירוע?</label>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4" dir="rtl">
+          <div className="bg-white rounded-[2.5rem] p-10 w-full max-w-md shadow-2xl relative animate-in slide-in-from-bottom">
+            <button onClick={() => setShowReportForm(false)} className="absolute top-6 left-6 text-slate-400 hover:text-slate-900"><X size={24} /></button>
+            <h3 className="text-slate-900 font-black text-2xl text-center mb-6">סיום אירוע</h3>
+            <label className="font-bold block mb-2 text-slate-700 text-sm">כיצד הסתיים האירוע?</label>
             <select 
-                value={reportData.outcome} 
-                onChange={(e) => setReportData({...reportData, outcome: e.target.value})}
-                className="w-full p-3 rounded-xl border border-slate-200 mb-4 text-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
+              value={reportData.outcome} 
+              onChange={(e) => setReportData({...reportData, outcome: e.target.value})}
+              className="w-full p-4 rounded-2xl border-2 border-slate-100 mb-6 text-lg bg-slate-50 outline-none focus:border-blue-500"
             >
-                <option value="calmed_down">✅ הרגעה במקום</option>
-                <option value="family_arrived">👨‍👩‍👧‍👦 הגעת בן משפחה</option>
-                <option value="ambulance">🚑 פינוי באמבולנס</option>
-                <option value="police">🚓 גורמי ביטחון</option>
-                <option value="refused_help">❌ סירב לקבל עזרה</option>
+              <option value="calmed_down">✅ הרגעה במקום</option>
+              <option value="family_arrived">👨‍👩‍👧‍👦 הגעת בן משפחה</option>
+              <option value="ambulance">🚑 פינוי באמבולנס</option>
+              <option value="police">🚓 גורמי ביטחון</option>
+              <option value="refused_help">❌ סירב לקבל עזרה</option>
             </select>
-
-            <textarea 
-                rows={4}
-                value={reportData.notes}
-                onChange={(e) => setReportData({...reportData, notes: e.target.value})}
-                className="w-full p-3 rounded-xl border border-slate-200 mb-6 text-base"
-                placeholder="הערות נוספות..."
-            />
-
-            <button onClick={submitReport} className="w-full py-4 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold text-lg shadow-lg">שלח וסיים</button>
-            </div>
+            <button onClick={submitReport} className="w-full py-5 bg-green-500 hover:bg-green-600 text-white rounded-[2rem] font-black text-xl shadow-lg transition-transform active:scale-95">שלח וסיים אירוע</button>
+          </div>
         </div>
       )}
     </div>
