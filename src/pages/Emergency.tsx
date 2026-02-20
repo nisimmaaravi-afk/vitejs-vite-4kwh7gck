@@ -60,6 +60,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
       if (!tagId || !reportData.outcome) {
         throw new Error('Missing critical data');
       }
+      console.log('Submitting report:', JSON.stringify(reportData));
       await addDoc(collection(db, 'system_logs'), {
         action: 'EVENT_RESOLVED',
         details: tagId,
@@ -243,7 +244,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
       {/* Footer */}
       <footer style={{ marginTop: '24px', padding: '24px', borderTop: '1px solid #e2e8f0', textAlign: 'center', background: 'white' }}>
         <p style={{ fontSize: '15px', fontWeight: 600, color: '#334155', fontStyle: 'italic', marginBottom: '16px', direction: 'rtl' }}>
-          "פוסט טראומה היא תווית שלא מבקשים, אבל הכרה היא תווית שכולנו ראויים לה."
+          "הצמיד הזה הוא לא רק סמל – הוא הצהרה שכולנו ראויים להכרה, לכבוד ולתמיכה. יחד, אנחנו יכולים לשנות את הדרך שבה החברה שלנו מתייחסת למתמודדים עם פוסט-טראומה."
         </p>
         <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           <span>מדיניות פרטיות</span>
@@ -276,6 +277,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
             <textarea
               value={reportData.freeText}
               onChange={(e) => { const val = e.target.value; setReportData(prev => ({ ...prev, freeText: val })); }}
+              onInput={(e) => { const val = (e.target as HTMLTextAreaElement).value; setReportData(prev => ({ ...prev, freeText: val })); }}
               placeholder="תאר את האירוע, פעולות שננקטו, הערות נוספות..."
               rows={4}
               style={{ width: '100%', padding: '14px 16px', borderRadius: '14px', border: '2px solid #e2e8f0', marginBottom: '24px', fontSize: '14px', background: '#f8fafc', outline: 'none', color: '#0f172a', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }}
