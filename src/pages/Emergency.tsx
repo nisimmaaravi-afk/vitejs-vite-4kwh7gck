@@ -70,174 +70,605 @@ export default function Emergency({ tagId }: { tagId: string }) {
     }
   };
 
-  if (!patient) return <div className="flex h-screen items-center justify-center font-sans">טוען נתונים...</div>;
+  if (!patient) return (
+    <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
+      טוען נתונים...
+    </div>
+  );
 
   const firstName = getFirstName(patient.fullName || patient.firstName || "");
 
-  // --- מסך תודה מעוצב (באותה שפה עיצובית) ---
+  // --- מסך תודה מעוצב ---
   if (reportSubmitted) {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6 text-center" dir="rtl">
-        <div className="bg-white p-10 rounded-[2rem] shadow-xl border border-slate-100 max-w-md w-full animate-in zoom-in">
-          <CheckCircle size={80} className="text-green-500 mx-auto mb-6 animate-bounce" />
-          <h2 className="text-3xl font-black text-slate-900 mb-4">תודה רבה!</h2>
-          <p className="text-lg text-slate-600 mb-8">
-            <span className="font-bold text-slate-900">{firstName}</span> מודה לך מקרב לב על העזרה. האירוע נסגר בבטחה.
+      <div style={{
+        minHeight: '100vh',
+        background: '#F0F4F8',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
+        textAlign: 'center',
+        direction: 'rtl',
+        fontFamily: "'Segoe UI', system-ui, sans-serif"
+      }}>
+        <div style={{
+          background: 'white',
+          padding: '48px',
+          borderRadius: '24px',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.1)',
+          maxWidth: '420px',
+          width: '100%'
+        }}>
+          <CheckCircle size={72} color="#22c55e" style={{ margin: '0 auto 24px' }} />
+          <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#0f172a', marginBottom: '12px' }}>תודה רבה!</h2>
+          <p style={{ fontSize: '16px', color: '#64748b', marginBottom: '32px', lineHeight: 1.6 }}>
+            <strong style={{ color: '#0f172a' }}>{firstName}</strong> מודה לך מקרב לב על העזרה. האירוע נסגר בבטחה.
           </p>
-          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-            <div className="bg-green-500 h-full animate-progress origin-right"></div>
+          <div style={{ width: '100%', background: '#e2e8f0', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{
+              background: '#22c55e',
+              height: '100%',
+              animation: 'progress 15s linear forwards',
+              transformOrigin: 'left'
+            }} />
           </div>
-          <p className="text-xs text-slate-400 mt-4">מנקה נתונים ויוצא בעוד 15 שניות...</p>
+          <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '12px' }}>מנקה נתונים ויוצא בעוד 15 שניות...</p>
         </div>
-        <style>{`@keyframes progress { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } } .animate-progress { animation: progress 15s linear forwards; }`}</style>
+        <style>{`@keyframes progress { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }`}</style>
       </div>
     );
   }
 
+  const styles: Record<string, React.CSSProperties> = {
+    page: {
+      minHeight: '100vh',
+      background: '#F0F4F8',
+      fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
+      color: '#0f172a',
+      paddingBottom: '40px',
+    },
+    header: {
+      background: 'white',
+      padding: '12px 20px',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderBottom: '1px solid #e2e8f0',
+      position: 'sticky' as const,
+      top: 0,
+      zIndex: 50,
+      boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+    },
+    logo: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      fontWeight: 900,
+      fontSize: '16px',
+      letterSpacing: '-0.5px'
+    },
+    activeBadge: {
+      background: '#fee2e2',
+      color: '#dc2626',
+      fontSize: '10px',
+      fontWeight: 800,
+      padding: '4px 10px',
+      borderRadius: '20px',
+      letterSpacing: '0.5px'
+    },
+    main: {
+      maxWidth: '960px',
+      margin: '0 auto',
+      padding: '24px 16px',
+    },
+    pageTitle: {
+      fontSize: '26px',
+      fontWeight: 900,
+      marginBottom: '4px',
+      color: '#0f172a'
+    },
+    pageMeta: {
+      fontSize: '11px',
+      color: '#94a3b8',
+      marginBottom: '28px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px'
+    },
+    grid: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: '20px',
+    },
+    // LEFT COLUMN
+    photoBox: {
+      borderRadius: '20px',
+      overflow: 'hidden',
+      aspectRatio: '1/1',
+      background: '#cbd5e1',
+      position: 'relative' as const,
+      boxShadow: '0 8px 30px rgba(0,0,0,0.15)'
+    },
+    photoImg: {
+      width: '100%',
+      height: '100%',
+      objectFit: 'cover' as const,
+    },
+    photoOverlay: {
+      position: 'absolute' as const,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      padding: '20px 16px 16px',
+      background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%)',
+    },
+    photoName: {
+      color: 'white',
+      fontSize: '20px',
+      fontWeight: 900,
+      margin: 0
+    },
+    photoSub: {
+      color: 'rgba(255,255,255,0.7)',
+      fontSize: '10px',
+      fontWeight: 700,
+      textTransform: 'uppercase' as const,
+      letterSpacing: '1.5px',
+      marginTop: '2px'
+    },
+    whatsHelpCard: {
+      background: 'white',
+      borderRadius: '20px',
+      padding: '20px',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+      marginTop: '16px'
+    },
+    whatsHelpTitle: {
+      fontWeight: 800,
+      fontSize: '15px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      marginBottom: '14px',
+      color: '#2563eb'
+    },
+    helpItem: {
+      display: 'flex',
+      gap: '12px',
+      padding: '12px',
+      background: '#f8fafc',
+      borderRadius: '14px',
+      marginBottom: '8px',
+      alignItems: 'flex-start'
+    },
+    helpItemTitle: {
+      fontWeight: 700,
+      fontSize: '13px',
+      color: '#0f172a',
+      margin: '0 0 2px'
+    },
+    helpItemDesc: {
+      fontSize: '11px',
+      color: '#64748b',
+      margin: 0,
+      lineHeight: 1.4
+    },
+    // RIGHT COLUMN
+    callBtn: {
+      display: 'block',
+      background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+      borderRadius: '18px',
+      padding: '20px 24px',
+      color: 'white',
+      textDecoration: 'none',
+      boxShadow: '0 8px 24px rgba(37,99,235,0.35)',
+      marginBottom: '12px',
+    },
+    callBtnTop: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: '16px'
+    },
+    callBtnLabel: {
+      fontSize: '10px',
+      fontWeight: 800,
+      opacity: 0.75,
+      textTransform: 'uppercase' as const,
+      letterSpacing: '1px',
+      marginBottom: '4px'
+    },
+    callBtnName: {
+      fontSize: '22px',
+      fontWeight: 900,
+      lineHeight: 1.1
+    },
+    callBtnPhone: {
+      fontSize: '13px',
+      opacity: 0.8,
+      marginTop: '2px'
+    },
+    callBtnIcon: {
+      background: 'rgba(255,255,255,0.2)',
+      borderRadius: '50%',
+      width: '48px',
+      height: '48px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0
+    },
+    callBtnFooter: {
+      textAlign: 'center' as const,
+      fontWeight: 800,
+      fontSize: '12px',
+      background: 'rgba(255,255,255,0.15)',
+      borderRadius: '10px',
+      padding: '8px',
+      letterSpacing: '0.5px'
+    },
+    shareBtn: {
+      width: '100%',
+      background: 'linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)',
+      borderRadius: '18px',
+      padding: '18px 24px',
+      color: 'white',
+      border: 'none',
+      cursor: 'pointer',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      boxShadow: '0 8px 24px rgba(6,182,212,0.3)',
+      marginBottom: '12px'
+    },
+    shareBtnLabel: {
+      fontSize: '10px',
+      fontWeight: 800,
+      opacity: 0.75,
+      textTransform: 'uppercase' as const,
+      letterSpacing: '1px',
+      marginBottom: '4px',
+      textAlign: 'left' as const
+    },
+    shareBtnTitle: {
+      fontSize: '18px',
+      fontWeight: 900,
+      textAlign: 'left' as const
+    },
+    shareBtnSub: {
+      fontSize: '11px',
+      opacity: 0.75,
+      textAlign: 'left' as const,
+      marginTop: '2px'
+    },
+    shareBtnIcon: {
+      background: 'rgba(255,255,255,0.2)',
+      borderRadius: '50%',
+      width: '44px',
+      height: '44px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0
+    },
+    protocolCard: {
+      background: 'white',
+      borderRadius: '20px',
+      padding: '22px',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+    },
+    protocolTitle: {
+      fontWeight: 800,
+      fontSize: '15px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      marginBottom: '20px',
+      color: '#0f172a'
+    },
+    protocolStep: {
+      display: 'flex',
+      gap: '16px',
+      alignItems: 'flex-start',
+      marginBottom: '20px'
+    },
+    stepNum: {
+      width: '32px',
+      height: '32px',
+      borderRadius: '50%',
+      background: '#2563eb',
+      color: 'white',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontWeight: 900,
+      fontSize: '14px',
+      flexShrink: 0
+    },
+    stepTitle: {
+      fontWeight: 700,
+      fontSize: '14px',
+      color: '#0f172a',
+      marginBottom: '3px'
+    },
+    stepDesc: {
+      fontSize: '12px',
+      color: '#64748b',
+      lineHeight: 1.5
+    },
+    alertBox: {
+      marginTop: '16px',
+      background: '#fff7ed',
+      borderRadius: '14px',
+      padding: '16px',
+      border: '1px solid #fed7aa',
+      display: 'flex',
+      gap: '12px',
+      alignItems: 'flex-start'
+    },
+    alertTitle: {
+      fontWeight: 800,
+      fontSize: '11px',
+      color: '#c2410c',
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.5px',
+      marginBottom: '4px'
+    },
+    alertText: {
+      fontSize: '13px',
+      color: '#1e293b',
+      fontWeight: 500,
+      margin: 0
+    },
+    resolveBtn: {
+      width: '100%',
+      padding: '14px',
+      background: 'none',
+      border: 'none',
+      color: '#94a3b8',
+      fontSize: '12px',
+      fontWeight: 700,
+      cursor: 'pointer',
+      textDecoration: 'underline',
+      marginTop: '8px'
+    },
+    footer: {
+      marginTop: '48px',
+      padding: '24px',
+      borderTop: '1px solid #e2e8f0',
+      textAlign: 'center' as const,
+      background: 'white'
+    },
+    footerQuote: {
+      fontSize: '15px',
+      fontWeight: 600,
+      color: '#334155',
+      fontStyle: 'italic',
+      marginBottom: '16px',
+      direction: 'rtl'
+    },
+    footerLinks: {
+      display: 'flex',
+      justifyContent: 'center',
+      gap: '20px',
+      fontSize: '10px',
+      fontWeight: 700,
+      color: '#94a3b8',
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.5px'
+    },
+    // Overlay
+    overlay: {
+      position: 'fixed' as const,
+      inset: 0,
+      background: 'rgba(15,23,42,0.6)',
+      backdropFilter: 'blur(4px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 100,
+      padding: '16px',
+      direction: 'rtl'
+    },
+    modal: {
+      background: 'white',
+      borderRadius: '28px',
+      padding: '40px',
+      width: '100%',
+      maxWidth: '400px',
+      boxShadow: '0 25px 80px rgba(0,0,0,0.2)',
+      position: 'relative' as const
+    },
+    closeBtn: {
+      position: 'absolute' as const,
+      top: '20px',
+      left: '20px',
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      color: '#94a3b8',
+      display: 'flex'
+    },
+    modalTitle: {
+      fontWeight: 900,
+      fontSize: '22px',
+      textAlign: 'center' as const,
+      marginBottom: '24px',
+      color: '#0f172a'
+    },
+    modalLabel: {
+      fontWeight: 700,
+      display: 'block',
+      marginBottom: '8px',
+      color: '#334155',
+      fontSize: '13px'
+    },
+    modalSelect: {
+      width: '100%',
+      padding: '14px 16px',
+      borderRadius: '14px',
+      border: '2px solid #e2e8f0',
+      marginBottom: '24px',
+      fontSize: '16px',
+      background: '#f8fafc',
+      outline: 'none',
+      color: '#0f172a'
+    },
+    submitBtn: {
+      width: '100%',
+      padding: '18px',
+      background: '#22c55e',
+      color: 'white',
+      border: 'none',
+      borderRadius: '18px',
+      fontWeight: 900,
+      fontSize: '18px',
+      cursor: 'pointer',
+      boxShadow: '0 8px 24px rgba(34,197,94,0.3)'
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 pb-10" dir="ltr">
+    <div style={styles.page}>
       {/* Header */}
-      <header className="bg-white p-4 flex justify-between items-center border-b border-slate-200 sticky top-0 z-50">
-        <div className="flex items-center gap-2">
-          <Shield className="text-blue-600" size={24} />
-          <span className="font-black text-lg tracking-tighter">RECO <span className="text-blue-600 uppercase">Emergency</span></span>
+      <header style={styles.header}>
+        <div style={styles.logo}>
+          <Shield color="#2563eb" size={22} />
+          <span>RECO <span style={{ color: '#2563eb' }}>חירום</span></span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="bg-red-100 text-red-600 text-[10px] font-black px-2 py-1 rounded-full animate-pulse">
-            ● ACTIVE EMERGENCY MODE
-          </span>
+        <div>
+          <span style={styles.activeBadge}>● מצב חירום פעיל</span>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-4 md:p-8">
-        <h1 className="text-3xl font-black mb-1">Emergency Profile: {patient.fullName}</h1>
-        <p className="text-slate-400 text-xs mb-8 flex items-center gap-1">
-          🕒 Last scan: {new Date().toLocaleDateString()} (Location: {patient.city || 'Israel'})
+      <main style={styles.main}>
+        <h1 style={styles.pageTitle}>פרופיל חירום: {patient.fullName}</h1>
+        <p style={styles.pageMeta}>
+          🕒 סריקה אחרונה: {new Date().toLocaleDateString('he-IL')} (מיקום: {patient.city || 'ישראל'})
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+        <div style={styles.grid}>
           
-          {/* Left Side: Image & What Helps */}
-          <div className="md:col-span-5 space-y-6">
-            <div className="relative rounded-[2rem] overflow-hidden shadow-2xl aspect-square bg-slate-200">
+          {/* Left Column */}
+          <div>
+            <div style={styles.photoBox}>
               {patient.photoURL ? (
-                <img src={patient.photoURL} alt="Patient" className="w-full h-full object-cover" />
+                <img src={patient.photoURL} alt="Patient" style={styles.photoImg} />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-400 font-bold">IMAGE</div>
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontWeight: 700 }}>תמונה</div>
               )}
-              <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent text-white">
-                <h2 className="text-2xl font-black">{patient.fullName}</h2>
-                <p className="text-xs opacity-80 uppercase font-bold tracking-widest">PTSD Bracelet Carrier</p>
+              <div style={styles.photoOverlay}>
+                <p style={styles.photoName}>{patient.fullName}</p>
+                <p style={styles.photoSub}>נושא צמיד PTSD</p>
               </div>
             </div>
 
-            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100">
-              <h3 className="font-black text-lg flex items-center gap-2 mb-4 text-blue-600">
-                <Heart size={20} fill="currentColor" /> What helps me
-              </h3>
-              <div className="space-y-3">
-                {[
-                  { icon: VolumeX, t: "Talk to me softly", d: "Keep your voice low and calm." },
-                  { icon: Hand, t: "Please don't touch me", d: "Physical contact can trigger a reaction." },
-                  { icon: PersonStanding, t: "Give me 5 feet of space", d: "Keep distance unless immediate danger." },
-                  { icon: Moon, t: "Move to a quiet area", d: "Avoid bright lights or loud noises." }
-                ].map((item, i) => (
-                  <div key={i} className="flex gap-4 p-4 bg-slate-50 rounded-2xl items-center">
-                    <item.icon className="text-blue-500 shrink-0" size={20} />
-                    <div>
-                      <h4 className="font-bold text-sm">{item.t}</h4>
-                      <p className="text-[11px] text-slate-500">{item.d}</p>
-                    </div>
-                  </div>
-                ))}
+            <div style={styles.whatsHelpCard}>
+              <div style={styles.whatsHelpTitle}>
+                <Heart size={18} fill="#2563eb" color="#2563eb" />
+                מה עוזר לי
               </div>
+              {[
+                { icon: VolumeX, t: "דברו איתי בשקט", d: "שמרו על קול נמוך ורגוע." },
+                { icon: Hand, t: "אל תגעו בי", d: "מגע פיזי עלול לגרום לתגובה." },
+                { icon: PersonStanding, t: "תנו לי מרחב של 1.5 מטר", d: "שמרו על מרחק אלא אם יש סכנה מידית." },
+                { icon: Moon, t: "עברו לאזור שקט", d: "הימנעו מאורות בהירים ורעשים חזקים." }
+              ].map((item, i) => (
+                <div key={i} style={styles.helpItem}>
+                  <item.icon color="#3b82f6" size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
+                  <div>
+                    <p style={styles.helpItemTitle}>{item.t}</p>
+                    <p style={styles.helpItemDesc}>{item.d}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Right Side: Actions & Protocol */}
-          <div className="md:col-span-7 space-y-4">
-            
-            {/* Action Buttons */}
-            <a href={`tel:${patient.emergencyPhone}`} className="block bg-blue-600 hover:bg-blue-700 transition-colors rounded-[1.5rem] p-6 text-white shadow-xl shadow-blue-500/20">
-              <div className="flex justify-between items-center mb-4">
+          {/* Right Column */}
+          <div>
+            {/* Call Button */}
+            <a href={`tel:${patient.emergencyPhone}`} style={styles.callBtn}>
+              <div style={styles.callBtnTop}>
                 <div>
-                  <p className="text-[10px] font-black opacity-70 tracking-widest uppercase">Emergency Contact</p>
-                  <h2 className="text-2xl font-black">Call Contact</h2>
+                  <p style={styles.callBtnLabel}>איש קשר לחירום</p>
+                  <h2 style={styles.callBtnName}>{patient.fullName?.split(' ')[0] || 'איש קשר'}</h2>
+                  <p style={styles.callBtnPhone}>{patient.emergencyPhone}</p>
                 </div>
-                <div className="bg-white/20 p-3 rounded-full"><Phone size={24} /></div>
+                <div style={styles.callBtnIcon}>
+                  <Phone size={22} />
+                </div>
               </div>
-              <div className="text-center font-black text-xs bg-white/10 py-2 rounded-xl">TAP TO CALL NOW</div>
+              <div style={styles.callBtnFooter}>לחצו לחיוג עכשיו</div>
             </a>
 
-            <button className="w-full bg-cyan-500 rounded-[1.5rem] p-6 text-white shadow-xl shadow-cyan-500/20 flex justify-between items-center">
-               <div>
-                  <p className="text-[10px] font-black opacity-70 tracking-widest uppercase">Live Tracking</p>
-                  <h2 className="text-xl font-black">Share Location</h2>
-               </div>
-               <div className="bg-white/20 p-3 rounded-full animate-pulse"><Share2 size={24} /></div>
-            </button>
 
-            {/* Protocol Section */}
-            <div className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 mt-6">
-              <h3 className="font-black text-lg flex items-center gap-2 mb-6">
-                <BriefcaseMedical className="text-blue-600" size={20} /> How to help (Responder Protocol)
-              </h3>
-              <div className="space-y-8">
-                {[
-                  { n: "1", t: "Stay with me", d: "Remain present and visible. Do not leave me alone." },
-                  { n: "2", t: "Call and share location", d: "Inform contact that I'm having a PTSD episode." },
-                  { n: "3", t: "Check for medical ID", d: "Check my phone Health App for allergy info." }
-                ].map((step, i) => (
-                  <div key={i} className="flex gap-6 items-start">
-                    <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-black shrink-0">{step.n}</div>
-                    <div>
-                      <h4 className="font-bold text-slate-900">{step.t}</h4>
-                      <p className="text-sm text-slate-500 leading-relaxed">{step.d}</p>
-                    </div>
-                  </div>
-                ))}
+
+            {/* Protocol Card */}
+            <div style={styles.protocolCard}>
+              <div style={styles.protocolTitle}>
+                <BriefcaseMedical color="#2563eb" size={18} />
+                כיצד לעזור (פרוטוקול מגיב)
               </div>
 
+              {[
+                { n: "1", t: "הישארו איתי", d: "הישארו נוכחים וגלויים. אל תעזבו אותי לבד." },
+                { n: "2", t: "התקשרו ושתפו מיקום", d: `הודיעו ל${firstName ? firstName : 'איש הקשר'} שאני חווה אפיזודת PTSD. לחצו על הכפתור הכחול למעלה לשיתוף מיקומי בזמן אמת.` },
+                { n: "3", t: "בדקו תעודה רפואית", d: "אם אני לא מגיב, בדקו תעודה רפואית באפליקציית הבריאות בטלפון שלי לנתוני אלרגיות." }
+              ].map((step, i) => (
+                <div key={i} style={styles.protocolStep}>
+                  <div style={styles.stepNum}>{step.n}</div>
+                  <div>
+                    <p style={styles.stepTitle}>{step.t}</p>
+                    <p style={styles.stepDesc}>{step.d}</p>
+                  </div>
+                </div>
+              ))}
+
               {/* Critical Alert */}
-              <div className="mt-10 bg-red-50 p-5 rounded-2xl border border-red-100 flex gap-4">
-                <AlertTriangle className="text-red-500 shrink-0" size={24} />
+              <div style={styles.alertBox}>
+                <AlertTriangle color="#f97316" size={22} style={{ flexShrink: 0 }} />
                 <div>
-                  <h4 className="text-red-700 font-black text-sm uppercase">Critical Medical Info</h4>
-                  <p className="text-sm text-slate-800 font-medium mt-1">{patient.notes || 'No critical info provided.'}</p>
+                  <p style={styles.alertTitle}>⚠ מידע רפואי קריטי</p>
+                  <p style={styles.alertText}>{patient.notes || 'לא סופק מידע קריטי.'}</p>
                 </div>
               </div>
             </div>
 
-            <button onClick={() => setShowReportForm(true)} className="w-full py-4 text-slate-400 text-xs font-bold hover:text-slate-900 underline">
-              ✅ Mark event as resolved / End event
+            <button onClick={() => setShowReportForm(true)} style={styles.resolveBtn}>
+              ✅ סמן אירוע כסגור / סיום אירוע
             </button>
           </div>
         </div>
       </main>
 
-      {/* Footer Quote */}
-      <footer className="mt-12 p-8 border-t border-slate-200 text-center bg-white">
-        <p className="text-lg font-bold text-slate-800 italic mb-4" dir="rtl">
+      {/* Footer */}
+      <footer style={styles.footer}>
+        <p style={styles.footerQuote}>
           "פוסט טראומה היא תווית שלא מבקשים, אבל הכרה היא תווית שכולנו ראויים לה."
         </p>
-        <div className="flex justify-center gap-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-           <span>Privacy Policy</span>
-           <span>Terms of Service</span>
-           <span>© 2026 Recognition Live Systems</span>
+        <div style={styles.footerLinks}>
+          <span>מדיניות פרטיות</span>
+          <span>תנאי שימוש</span>
+          <span>© 2026 Recognition Live Systems</span>
         </div>
       </footer>
 
       {/* Report Form Overlay */}
       {showReportForm && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4" dir="rtl">
-          <div className="bg-white rounded-[2.5rem] p-10 w-full max-w-md shadow-2xl relative animate-in slide-in-from-bottom">
-            <button onClick={() => setShowReportForm(false)} className="absolute top-6 left-6 text-slate-400 hover:text-slate-900"><X size={24} /></button>
-            <h3 className="text-slate-900 font-black text-2xl text-center mb-6">סיום אירוע</h3>
-            <label className="font-bold block mb-2 text-slate-700 text-sm">כיצד הסתיים האירוע?</label>
+        <div style={styles.overlay}>
+          <div style={styles.modal}>
+            <button onClick={() => setShowReportForm(false)} style={styles.closeBtn}>
+              <X size={22} />
+            </button>
+            <h3 style={styles.modalTitle}>סיום אירוע</h3>
+            <label style={styles.modalLabel}>כיצד הסתיים האירוע?</label>
             <select 
               value={reportData.outcome} 
               onChange={(e) => setReportData({...reportData, outcome: e.target.value})}
-              className="w-full p-4 rounded-2xl border-2 border-slate-100 mb-6 text-lg bg-slate-50 outline-none focus:border-blue-500"
+              style={styles.modalSelect}
             >
               <option value="calmed_down">✅ הרגעה במקום</option>
               <option value="family_arrived">👨‍👩‍👧‍👦 הגעת בן משפחה</option>
@@ -245,7 +676,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
               <option value="police">🚓 גורמי ביטחון</option>
               <option value="refused_help">❌ סירב לקבל עזרה</option>
             </select>
-            <button onClick={submitReport} className="w-full py-5 bg-green-500 hover:bg-green-600 text-white rounded-[2rem] font-black text-xl shadow-lg transition-transform active:scale-95">שלח וסיים אירוע</button>
+            <button onClick={submitReport} style={styles.submitBtn}>שלח וסיים אירוע</button>
           </div>
         </div>
       )}
