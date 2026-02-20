@@ -1,15 +1,10 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { 
-  Phone, Share2, Heart, VolumeX, Hand, PersonStanding, 
-  Moon, BriefcaseMedical, AlertTriangle, X, CheckCircle, Shield 
+import {
+  Phone, Heart, VolumeX, Hand, PersonStanding,
+  Moon, AlertTriangle, X, CheckCircle, Shield
 } from 'lucide-react';
-
-/**
- * Recognition Live - Official Emergency Module
- * מבוסס על העיצוב המקצועי שסיפקת.
- */
 
 interface PatientData {
   fullName?: string;
@@ -30,25 +25,24 @@ export default function Emergency({ tagId }: { tagId: string }) {
   const [medicalCode, setMedicalCode] = useState('');
   const [medicalUnlocked, setMedicalUnlocked] = useState(false);
   const [codeError, setCodeError] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
   const MEDICAL_CODE = '1010';
-  
-  const startTimeRef = useRef(Date.now());
 
   const getFirstName = (name: string): string => {
-    if (!name) return "המטופל";
+    if (!name) return 'המטופל';
     return name.trim().split(' ')[0];
   };
 
   useEffect(() => {
     const fetchPatient = async () => {
       if (!tagId) return;
-      const docSnap = await getDoc(doc(db, "users", tagId));
+      const docSnap = await getDoc(doc(db, 'users', tagId));
       if (docSnap.exists()) setPatient(docSnap.data() as PatientData);
     };
     fetchPatient();
   }, [tagId]);
 
-  // יציאה מאובטחת לאחר 15 שניות
   useEffect(() => {
     if (reportSubmitted) {
       const timer = setTimeout(() => {
@@ -59,19 +53,28 @@ export default function Emergency({ tagId }: { tagId: string }) {
   }, [reportSubmitted]);
 
   const submitReport = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError(false);
     try {
+      if (!tagId || !reportData.outcome) {
+        throw new Error('Missing critical data');
+      }
       await addDoc(collection(db, 'system_logs'), {
-        action: 'EVENT_RESOLVED', 
+        action: 'EVENT_RESOLVED',
         details: tagId,
         outcome: reportData.outcome,
-        notes: reportData.notes,
-        freeText: reportData.freeText || null,
+        notes: reportData.notes || '',
+        freeText: reportData.freeText?.trim() || '',
         timestamp: serverTimestamp(),
-        user: 'Scanner'
+        user: 'Scanner',
+        appVersion: '2.0.0-PRO',
       });
       setReportSubmitted(true);
     } catch (e) {
-      console.error("Error submitting report", e);
+      console.error('Critical: Error submitting report', e);
+      setSubmitError(true);
+      setIsSubmitting(false);
     }
   };
 
@@ -81,52 +84,28 @@ export default function Emergency({ tagId }: { tagId: string }) {
     </div>
   );
 
-  const firstName = getFirstName(patient.fullName || patient.firstName || "");
+  const firstName = getFirstName(patient.fullName || patient.firstName || '');
 
-  // --- מסך תודה מעוצב ---
   if (reportSubmitted) {
     return (
       <div style={{
-        minHeight: '100vh',
-        background: '#F0F4F8',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-        textAlign: 'center',
-        direction: 'rtl',
-        fontFamily: "'Segoe UI', system-ui, sans-serif"
+        minHeight: '100vh', background: '#F0F4F8', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', padding: '24px',
+        textAlign: 'center', direction: 'rtl', fontFamily: "'Segoe UI', system-ui, sans-serif"
       }}>
-        <div style={{
-          background: 'white',
-          padding: '48px',
-          borderRadius: '24px',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.1)',
-          maxWidth: '480px',
-          width: '100%'
-        }}>
+        <div style={{ background: 'white', padding: '48px', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.1)', maxWidth: '480px', width: '100%' }}>
           <CheckCircle size={72} color="#22c55e" style={{ margin: '0 auto 24px' }} />
           <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#0f172a', marginBottom: '12px' }}>תודה רבה!</h2>
           <p style={{ fontSize: '16px', color: '#64748b', marginBottom: '28px', lineHeight: 1.6 }}>
             <strong style={{ color: '#0f172a' }}>{firstName}</strong> מודה לך מקרב לב על העזרה. האירוע נסגר בבטחה.
           </p>
-          <div style={{
-            borderTop: '1px solid #e2e8f0',
-            paddingTop: '24px',
-            marginBottom: '28px'
-          }}>
+          <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '24px', marginBottom: '28px' }}>
             <p style={{ fontSize: '15px', fontWeight: 600, color: '#334155', fontStyle: 'italic', lineHeight: 1.6 }}>
               "פוסט טראומה היא תווית שלא מבקשים, אבל הכרה היא תווית שכולנו ראויים לה."
             </p>
           </div>
           <div style={{ width: '100%', background: '#e2e8f0', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
-            <div style={{
-              background: '#22c55e',
-              height: '100%',
-              animation: 'progress 15s linear forwards',
-              transformOrigin: 'left'
-            }} />
+            <div style={{ background: '#22c55e', height: '100%', animation: 'progress 15s linear forwards', transformOrigin: 'left' }} />
           </div>
           <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '12px' }}>מנקה נתונים ויוצא בעוד 15 שניות...</p>
         </div>
@@ -135,454 +114,41 @@ export default function Emergency({ tagId }: { tagId: string }) {
     );
   }
 
-  const styles: Record<string, React.CSSProperties> = {
-    page: {
-      minHeight: '100vh',
-      background: '#F0F4F8',
-      fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
-      color: '#0f172a',
-      paddingBottom: '40px',
-    },
-    header: {
-      background: 'white',
-      padding: '12px 20px',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      borderBottom: '1px solid #e2e8f0',
-      position: 'sticky' as const,
-      top: 0,
-      zIndex: 50,
-      boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
-    },
-    logo: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      fontWeight: 900,
-      fontSize: '16px',
-      letterSpacing: '-0.5px'
-    },
-    activeBadge: {
-      background: '#fee2e2',
-      color: '#dc2626',
-      fontSize: '10px',
-      fontWeight: 800,
-      padding: '4px 10px',
-      borderRadius: '20px',
-      letterSpacing: '0.5px'
-    },
-    main: {
-      maxWidth: '960px',
-      margin: '0 auto',
-      padding: '24px 16px',
-    },
-    pageTitle: {
-      fontSize: '26px',
-      fontWeight: 900,
-      marginBottom: '4px',
-      color: '#0f172a'
-    },
-    pageMeta: {
-      fontSize: '11px',
-      color: '#94a3b8',
-      marginBottom: '28px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px'
-    },
-    grid: {
-      display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
-      gap: '20px',
-    },
-    // LEFT COLUMN
-    photoBox: {
-      borderRadius: '20px',
-      overflow: 'hidden',
-      aspectRatio: '1/1',
-      background: '#cbd5e1',
-      position: 'relative' as const,
-      boxShadow: '0 8px 30px rgba(0,0,0,0.15)'
-    },
-    photoImg: {
-      width: '100%',
-      height: '100%',
-      objectFit: 'cover' as const,
-    },
-    photoOverlay: {
-      position: 'absolute' as const,
-      bottom: 0,
-      left: 0,
-      right: 0,
-      padding: '20px 16px 16px',
-      background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%)',
-    },
-    photoName: {
-      color: 'white',
-      fontSize: '20px',
-      fontWeight: 900,
-      margin: 0
-    },
-    photoSub: {
-      color: 'rgba(255,255,255,0.7)',
-      fontSize: '10px',
-      fontWeight: 700,
-      textTransform: 'uppercase' as const,
-      letterSpacing: '1.5px',
-      marginTop: '2px'
-    },
-    whatsHelpCard: {
-      background: 'white',
-      borderRadius: '20px',
-      padding: '20px',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-      marginTop: '16px'
-    },
-    whatsHelpTitle: {
-      fontWeight: 800,
-      fontSize: '15px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      marginBottom: '14px',
-      color: '#2563eb'
-    },
-    helpItem: {
-      display: 'flex',
-      gap: '12px',
-      padding: '12px',
-      background: '#f8fafc',
-      borderRadius: '14px',
-      marginBottom: '8px',
-      alignItems: 'flex-start'
-    },
-    helpItemTitle: {
-      fontWeight: 700,
-      fontSize: '13px',
-      color: '#0f172a',
-      margin: '0 0 2px'
-    },
-    helpItemDesc: {
-      fontSize: '11px',
-      color: '#64748b',
-      margin: 0,
-      lineHeight: 1.4
-    },
-    // RIGHT COLUMN
-    callBtn: {
-      display: 'block',
-      background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
-      borderRadius: '18px',
-      padding: '20px 24px',
-      color: 'white',
-      textDecoration: 'none',
-      boxShadow: '0 8px 24px rgba(37,99,235,0.35)',
-      marginBottom: '12px',
-    },
-    callBtnTop: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: '16px'
-    },
-    callBtnLabel: {
-      fontSize: '10px',
-      fontWeight: 800,
-      opacity: 0.75,
-      textTransform: 'uppercase' as const,
-      letterSpacing: '1px',
-      marginBottom: '4px'
-    },
-    callBtnName: {
-      fontSize: '22px',
-      fontWeight: 900,
-      lineHeight: 1.1
-    },
-    callBtnPhone: {
-      fontSize: '13px',
-      opacity: 0.8,
-      marginTop: '2px'
-    },
-    callBtnIcon: {
-      background: 'rgba(255,255,255,0.2)',
-      borderRadius: '50%',
-      width: '48px',
-      height: '48px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0
-    },
-    callBtnFooter: {
-      textAlign: 'center' as const,
-      fontWeight: 800,
-      fontSize: '12px',
-      background: 'rgba(255,255,255,0.15)',
-      borderRadius: '10px',
-      padding: '8px',
-      letterSpacing: '0.5px'
-    },
-    shareBtn: {
-      width: '100%',
-      background: 'linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)',
-      borderRadius: '18px',
-      padding: '18px 24px',
-      color: 'white',
-      border: 'none',
-      cursor: 'pointer',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      boxShadow: '0 8px 24px rgba(6,182,212,0.3)',
-      marginBottom: '12px'
-    },
-    shareBtnLabel: {
-      fontSize: '10px',
-      fontWeight: 800,
-      opacity: 0.75,
-      textTransform: 'uppercase' as const,
-      letterSpacing: '1px',
-      marginBottom: '4px',
-      textAlign: 'left' as const
-    },
-    shareBtnTitle: {
-      fontSize: '18px',
-      fontWeight: 900,
-      textAlign: 'left' as const
-    },
-    shareBtnSub: {
-      fontSize: '11px',
-      opacity: 0.75,
-      textAlign: 'left' as const,
-      marginTop: '2px'
-    },
-    shareBtnIcon: {
-      background: 'rgba(255,255,255,0.2)',
-      borderRadius: '50%',
-      width: '44px',
-      height: '44px',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0
-    },
-    protocolCard: {
-      background: 'white',
-      borderRadius: '20px',
-      padding: '22px',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-    },
-    protocolTitle: {
-      fontWeight: 800,
-      fontSize: '15px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '8px',
-      marginBottom: '20px',
-      color: '#0f172a'
-    },
-    protocolStep: {
-      display: 'flex',
-      gap: '16px',
-      alignItems: 'flex-start',
-      marginBottom: '20px'
-    },
-    stepNum: {
-      width: '32px',
-      height: '32px',
-      borderRadius: '50%',
-      background: '#2563eb',
-      color: 'white',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontWeight: 900,
-      fontSize: '14px',
-      flexShrink: 0
-    },
-    stepTitle: {
-      fontWeight: 700,
-      fontSize: '14px',
-      color: '#0f172a',
-      marginBottom: '3px'
-    },
-    stepDesc: {
-      fontSize: '12px',
-      color: '#64748b',
-      lineHeight: 1.5
-    },
-    alertBox: {
-      marginTop: '16px',
-      background: '#fff7ed',
-      borderRadius: '14px',
-      padding: '16px',
-      border: '1px solid #fed7aa',
-      display: 'flex',
-      gap: '12px',
-      alignItems: 'flex-start'
-    },
-    alertTitle: {
-      fontWeight: 800,
-      fontSize: '11px',
-      color: '#c2410c',
-      textTransform: 'uppercase' as const,
-      letterSpacing: '0.5px',
-      marginBottom: '4px'
-    },
-    alertText: {
-      fontSize: '13px',
-      color: '#1e293b',
-      fontWeight: 500,
-      margin: 0
-    },
-    resolveBtn: {
-      width: '100%',
-      padding: '14px',
-      background: 'none',
-      border: 'none',
-      color: '#94a3b8',
-      fontSize: '12px',
-      fontWeight: 700,
-      cursor: 'pointer',
-      textDecoration: 'underline',
-      marginTop: '8px'
-    },
-    footer: {
-      marginTop: '48px',
-      padding: '24px',
-      borderTop: '1px solid #e2e8f0',
-      textAlign: 'center' as const,
-      background: 'white'
-    },
-    footerQuote: {
-      fontSize: '15px',
-      fontWeight: 600,
-      color: '#334155',
-      fontStyle: 'italic',
-      marginBottom: '16px',
-      direction: 'rtl'
-    },
-    footerLinks: {
-      display: 'flex',
-      justifyContent: 'center',
-      gap: '20px',
-      fontSize: '10px',
-      fontWeight: 700,
-      color: '#94a3b8',
-      textTransform: 'uppercase' as const,
-      letterSpacing: '0.5px'
-    },
-    // Overlay
-    overlay: {
-      position: 'fixed' as const,
-      inset: 0,
-      background: 'rgba(15,23,42,0.6)',
-      backdropFilter: 'blur(4px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 100,
-      padding: '16px',
-      direction: 'rtl'
-    },
-    modal: {
-      background: 'white',
-      borderRadius: '28px',
-      padding: '40px',
-      width: '100%',
-      maxWidth: '400px',
-      boxShadow: '0 25px 80px rgba(0,0,0,0.2)',
-      position: 'relative' as const
-    },
-    closeBtn: {
-      position: 'absolute' as const,
-      top: '20px',
-      left: '20px',
-      background: 'none',
-      border: 'none',
-      cursor: 'pointer',
-      color: '#94a3b8',
-      display: 'flex'
-    },
-    modalTitle: {
-      fontWeight: 900,
-      fontSize: '22px',
-      textAlign: 'center' as const,
-      marginBottom: '24px',
-      color: '#0f172a'
-    },
-    modalLabel: {
-      fontWeight: 700,
-      display: 'block',
-      marginBottom: '8px',
-      color: '#334155',
-      fontSize: '13px'
-    },
-    modalSelect: {
-      width: '100%',
-      padding: '14px 16px',
-      borderRadius: '14px',
-      border: '2px solid #e2e8f0',
-      marginBottom: '24px',
-      fontSize: '16px',
-      background: '#f8fafc',
-      outline: 'none',
-      color: '#0f172a'
-    },
-    submitBtn: {
-      width: '100%',
-      padding: '18px',
-      background: '#22c55e',
-      color: 'white',
-      border: 'none',
-      borderRadius: '18px',
-      fontWeight: 900,
-      fontSize: '18px',
-      cursor: 'pointer',
-      boxShadow: '0 8px 24px rgba(34,197,94,0.3)'
-    }
-  };
-
   return (
-    <div style={styles.page}>
+    <div style={{ minHeight: '100vh', background: '#F0F4F8', fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", color: '#0f172a', paddingBottom: '40px' }}>
+
       {/* Header */}
-      <header style={styles.header}>
-        <div style={styles.logo}>
+      <header style={{
+        background: 'white', padding: '12px 20px', display: 'flex', justifyContent: 'space-between',
+        alignItems: 'center', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 50,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 900, fontSize: '16px', letterSpacing: '-0.5px' }}>
           <Shield color="#2563eb" size={22} />
           <span>Recognition Live <span style={{ color: '#2563eb' }}>חירום</span></span>
         </div>
-        <div>
-          <span style={styles.activeBadge}>● מצב חירום פעיל</span>
-        </div>
+        <span style={{ background: '#fee2e2', color: '#dc2626', fontSize: '10px', fontWeight: 800, padding: '4px 10px', borderRadius: '20px', letterSpacing: '0.5px' }}>
+          ● מצב חירום פעיל
+        </span>
       </header>
 
       <main style={{ maxWidth: '960px', margin: '0 auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-        <h1 style={{ fontSize: '20px', fontWeight: 900, color: '#0f172a', margin: 0 }}>פרופיל חירום: {patient.fullName}</h1>
+        <h1 style={{ fontSize: '20px', fontWeight: 900, color: '#0f172a', margin: 0 }}>
+          פרופיל חירום: {patient.fullName}
+        </h1>
 
-        {/* שורה עליונה: תמונה (שמאל) + כפתור חיוג (ימין) */}
+        {/* שורה עליונה: תמונה + כפתור חיוג */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'stretch' }}>
 
           {/* תמונה */}
-          <div style={{
-            borderRadius: '16px',
-            overflow: 'hidden',
-            background: '#cbd5e1',
-            position: 'relative',
-            minHeight: '160px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.12)'
-          }}>
+          <div style={{ borderRadius: '16px', overflow: 'hidden', background: '#cbd5e1', position: 'relative', minHeight: '160px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
             {patient.photoURL ? (
               <img src={patient.photoURL} alt="Patient" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontWeight: 700 }}>תמונה</div>
             )}
-            <div style={{
-              position: 'absolute', bottom: 0, left: 0, right: 0,
-              padding: '16px 12px 10px',
-              background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%)'
-            }}>
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px 12px 10px', background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%)' }}>
               <p style={{ color: 'white', fontSize: '16px', fontWeight: 900, margin: 0 }}>{patient.fullName}</p>
               <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', marginTop: '2px' }}>נושא צמיד PTSD</p>
             </div>
@@ -590,15 +156,10 @@ export default function Emergency({ tagId }: { tagId: string }) {
 
           {/* כפתור חיוג */}
           <a href={`tel:${patient.emergencyPhone}`} style={{
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
+            display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
             background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
-            borderRadius: '16px',
-            padding: '20px 24px',
-            color: 'white',
-            textDecoration: 'none',
-            boxShadow: '0 6px 20px rgba(37,99,235,0.35)',
+            borderRadius: '16px', padding: '20px 24px', color: 'white',
+            textDecoration: 'none', boxShadow: '0 6px 20px rgba(37,99,235,0.35)',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <p style={{ fontSize: '28px', fontWeight: 900, margin: 0, letterSpacing: '-0.5px', lineHeight: 1.2 }}>
@@ -614,23 +175,18 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </a>
         </div>
 
-        {/* שורה אמצעית: פרוטוקול הכרה - רוחב מלא */}
-        <div style={{
-          background: 'white',
-          borderRadius: '16px',
-          padding: '16px 20px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-        }}>
+        {/* פרוטוקול הכרה */}
+        <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           <div style={{ fontWeight: 800, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#2563eb' }}>
             <Heart size={18} fill="#2563eb" color="#2563eb" />
             פעל על פי פרוטוקול הכרה
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
             {[
-              { icon: VolumeX, t: "דברו איתי בשקט", d: "שמרו על קול נמוך ורגוע." },
-              { icon: Hand, t: "אל תגעו בי", d: "מגע פיזי עלול לגרום לתגובה." },
-              { icon: PersonStanding, t: "תנו לי מרחב של 1.5 מטר", d: "שמרו על מרחק אלא אם יש סכנה מידית." },
-              { icon: Moon, t: "עברו לאזור שקט", d: "עצור התקהלות של אנשים מסביב." }
+              { icon: VolumeX, t: 'דברו איתי בשקט', d: 'שמרו על קול נמוך ורגוע.' },
+              { icon: Hand, t: 'אל תגעו בי', d: 'מגע פיזי עלול לגרום לתגובה.' },
+              { icon: PersonStanding, t: 'תנו לי מרחב של 1.5 מטר', d: 'שמרו על מרחק אלא אם יש סכנה מידית.' },
+              { icon: Moon, t: 'עברו לאזור שקט', d: 'עצור התקהלות של אנשים מסביב.' },
             ].map((item, i) => (
               <div key={i} style={{ display: 'flex', gap: '10px', padding: '12px', background: '#f8fafc', borderRadius: '12px', alignItems: 'flex-start' }}>
                 <item.icon color="#3b82f6" size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
@@ -643,22 +199,16 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </div>
         </div>
 
-        {/* שורה תחתונה: מידע רפואי + סיום אירוע */}
-        <div style={{
-          background: 'white',
-          borderRadius: '16px',
-          padding: '16px 20px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-        }}>
+        {/* מידע רפואי קריטי */}
+        <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
             <AlertTriangle color="#f97316" size={18} style={{ flexShrink: 0 }} />
             <p style={{ fontWeight: 800, fontSize: '13px', color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>
               ⚠ מידע רפואי קריטי — מסווג
             </p>
           </div>
-
           {!medicalUnlocked ? (
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <p style={{ fontSize: '12px', color: '#64748b', margin: '0 8px 0 0', flexShrink: 0 }}>הזן קוד גישה:</p>
               <input
                 type="password"
@@ -666,23 +216,10 @@ export default function Emergency({ tagId }: { tagId: string }) {
                 onChange={(e) => { setMedicalCode(e.target.value); setCodeError(false); }}
                 placeholder="••••"
                 maxLength={6}
-                style={{
-                  width: '100px',
-                  padding: '8px 12px',
-                  borderRadius: '10px',
-                  border: codeError ? '2px solid #ef4444' : '2px solid #e2e8f0',
-                  fontSize: '18px',
-                  outline: 'none',
-                  textAlign: 'center',
-                  letterSpacing: '6px',
-                  direction: 'ltr'
-                }}
+                style={{ width: '100px', padding: '8px 12px', borderRadius: '10px', border: codeError ? '2px solid #ef4444' : '2px solid #e2e8f0', fontSize: '18px', outline: 'none', textAlign: 'center', letterSpacing: '6px', direction: 'ltr' }}
               />
               <button
-                onClick={() => {
-                  if (medicalCode === MEDICAL_CODE) { setMedicalUnlocked(true); setCodeError(false); }
-                  else { setCodeError(true); }
-                }}
+                onClick={() => { if (medicalCode === MEDICAL_CODE) { setMedicalUnlocked(true); setCodeError(false); } else { setCodeError(true); } }}
                 style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
               >אשר</button>
               {codeError && <p style={{ color: '#ef4444', fontSize: '11px', margin: 0 }}>קוד שגוי</p>}
@@ -704,30 +241,30 @@ export default function Emergency({ tagId }: { tagId: string }) {
       </main>
 
       {/* Footer */}
-      <footer style={styles.footer}>
-        <p style={styles.footerQuote}>
+      <footer style={{ marginTop: '24px', padding: '24px', borderTop: '1px solid #e2e8f0', textAlign: 'center', background: 'white' }}>
+        <p style={{ fontSize: '15px', fontWeight: 600, color: '#334155', fontStyle: 'italic', marginBottom: '16px', direction: 'rtl' }}>
           "פוסט טראומה היא תווית שלא מבקשים, אבל הכרה היא תווית שכולנו ראויים לה."
         </p>
-        <div style={styles.footerLinks}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           <span>מדיניות פרטיות</span>
           <span>תנאי שימוש</span>
           <span>© 2026 Recognition Live Systems</span>
         </div>
       </footer>
 
-      {/* Report Form Overlay */}
+      {/* מודל סיום אירוע */}
       {showReportForm && (
-        <div style={styles.overlay}>
-          <div style={styles.modal}>
-            <button onClick={() => setShowReportForm(false)} style={styles.closeBtn}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '16px', direction: 'rtl' }}>
+          <div style={{ background: 'white', borderRadius: '28px', padding: '40px', width: '100%', maxWidth: '400px', boxShadow: '0 25px 80px rgba(0,0,0,0.2)', position: 'relative' }}>
+            <button onClick={() => setShowReportForm(false)} style={{ position: 'absolute', top: '20px', left: '20px', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
               <X size={22} />
             </button>
-            <h3 style={styles.modalTitle}>סיום אירוע</h3>
-            <label style={styles.modalLabel}>כיצד הסתיים האירוע?</label>
-            <select 
-              value={reportData.outcome} 
+            <h3 style={{ fontWeight: 900, fontSize: '22px', textAlign: 'center', marginBottom: '24px', color: '#0f172a' }}>סיום אירוע</h3>
+            <label style={{ fontWeight: 700, display: 'block', marginBottom: '8px', color: '#334155', fontSize: '13px' }}>כיצד הסתיים האירוע?</label>
+            <select
+              value={reportData.outcome}
               onChange={(e) => { const val = e.target.value; setReportData(prev => ({ ...prev, outcome: val })); }}
-              style={styles.modalSelect}
+              style={{ width: '100%', padding: '14px 16px', borderRadius: '14px', border: '2px solid #e2e8f0', marginBottom: '16px', fontSize: '16px', background: '#f8fafc', outline: 'none', color: '#0f172a' }}
             >
               <option value="calmed_down">✅ הרגעה במקום</option>
               <option value="family_arrived">👨‍👩‍👧‍👦 הגעת בן משפחה</option>
@@ -735,29 +272,22 @@ export default function Emergency({ tagId }: { tagId: string }) {
               <option value="police">🚓 גורמי ביטחון</option>
               <option value="refused_help">❌ סירב לקבל עזרה</option>
             </select>
-            <label style={styles.modalLabel}>תיאור חופשי (אופציונלי)</label>
+            <label style={{ fontWeight: 700, display: 'block', marginBottom: '8px', color: '#334155', fontSize: '13px' }}>תיאור חופשי (אופציונלי)</label>
             <textarea
               value={reportData.freeText}
               onChange={(e) => { const val = e.target.value; setReportData(prev => ({ ...prev, freeText: val })); }}
               placeholder="תאר את האירוע, פעולות שננקטו, הערות נוספות..."
               rows={4}
-              style={{
-                width: '100%',
-                padding: '14px 16px',
-                borderRadius: '14px',
-                border: '2px solid #e2e8f0',
-                marginBottom: '24px',
-                fontSize: '14px',
-                background: '#f8fafc',
-                outline: 'none',
-                color: '#0f172a',
-                resize: 'vertical' as const,
-                fontFamily: 'inherit',
-                lineHeight: 1.5,
-                boxSizing: 'border-box' as const
-              }}
+              style={{ width: '100%', padding: '14px 16px', borderRadius: '14px', border: '2px solid #e2e8f0', marginBottom: '24px', fontSize: '14px', background: '#f8fafc', outline: 'none', color: '#0f172a', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }}
             />
-            <button onClick={submitReport} style={styles.submitBtn}>שלח וסיים אירוע</button>
+            {submitError && (
+              <p style={{ color: '#ef4444', fontSize: '13px', textAlign: 'center', marginBottom: '12px', fontWeight: 600 }}>
+                ⚠ שגיאה בשליחה, אנא נסה שנית
+              </p>
+            )}
+            <button onClick={submitReport} disabled={isSubmitting} style={{ width: '100%', padding: '18px', background: isSubmitting ? '#86efac' : '#22c55e', color: 'white', border: 'none', borderRadius: '18px', fontWeight: 900, fontSize: '18px', cursor: isSubmitting ? 'not-allowed' : 'pointer', boxShadow: '0 8px 24px rgba(34,197,94,0.3)', transition: 'background 0.2s' }}>
+              {isSubmitting ? 'שולח...' : 'שלח וסיים אירוע'}
+            </button>
           </div>
         </div>
       )}
