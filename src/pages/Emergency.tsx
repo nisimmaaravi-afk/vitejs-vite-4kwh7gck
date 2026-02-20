@@ -26,7 +26,11 @@ export default function Emergency({ tagId }: { tagId: string }) {
   const [patient, setPatient] = useState<PatientData | null>(null);
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [showReportForm, setShowReportForm] = useState(false);
-  const [reportData, setReportData] = useState({ outcome: 'calmed_down', notes: '' });
+  const [reportData, setReportData] = useState({ outcome: 'calmed_down', notes: '', freeText: '' });
+  const [medicalCode, setMedicalCode] = useState('');
+  const [medicalUnlocked, setMedicalUnlocked] = useState(false);
+  const [codeError, setCodeError] = useState(false);
+  const MEDICAL_CODE = '1010';
   
   const startTimeRef = useRef(Date.now());
 
@@ -61,6 +65,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
         details: tagId,
         outcome: reportData.outcome,
         notes: reportData.notes,
+        freeText: reportData.freeText,
         timestamp: serverTimestamp(),
         user: 'Scanner'
       });
@@ -545,7 +550,8 @@ export default function Emergency({ tagId }: { tagId: string }) {
 
       <main style={styles.main}>
         <h1 style={styles.pageTitle}>פרופיל חירום: {patient.fullName}</h1>
-        <p style={styles.pageMeta}>
+        {/* 1. סריקה אחרונה - מוסתר */}
+        <p style={{ ...styles.pageMeta, display: 'none' }}>
           🕒 סריקה אחרונה: {new Date().toLocaleDateString('he-IL')} (מיקום: {patient.city || 'ישראל'})
         </p>
 
@@ -565,9 +571,10 @@ export default function Emergency({ tagId }: { tagId: string }) {
               </div>
             </div>
 
-            <div style={styles.whatsHelpCard}>
-              <div style={styles.whatsHelpTitle}>
-                <Heart size={18} fill="#2563eb" color="#2563eb" />
+            {/* 4. "מה עוזר לי" מוגדל פרופורציונלית */}
+            <div style={{ ...styles.whatsHelpCard, marginTop: '16px', padding: '24px' }}>
+              <div style={{ ...styles.whatsHelpTitle, fontSize: '18px', marginBottom: '18px' }}>
+                <Heart size={22} fill="#2563eb" color="#2563eb" />
                 מה עוזר לי
               </div>
               {[
@@ -576,11 +583,11 @@ export default function Emergency({ tagId }: { tagId: string }) {
                 { icon: PersonStanding, t: "תנו לי מרחב של 1.5 מטר", d: "שמרו על מרחק אלא אם יש סכנה מידית." },
                 { icon: Moon, t: "עברו לאזור שקט", d: "הימנעו מאורות בהירים ורעשים חזקים." }
               ].map((item, i) => (
-                <div key={i} style={styles.helpItem}>
-                  <item.icon color="#3b82f6" size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
+                <div key={i} style={{ ...styles.helpItem, padding: '16px', marginBottom: '10px' }}>
+                  <item.icon color="#3b82f6" size={22} style={{ flexShrink: 0, marginTop: '1px' }} />
                   <div>
-                    <p style={styles.helpItemTitle}>{item.t}</p>
-                    <p style={styles.helpItemDesc}>{item.d}</p>
+                    <p style={{ ...styles.helpItemTitle, fontSize: '15px' }}>{item.t}</p>
+                    <p style={{ ...styles.helpItemDesc, fontSize: '13px' }}>{item.d}</p>
                   </div>
                 </div>
               ))}
@@ -589,54 +596,95 @@ export default function Emergency({ tagId }: { tagId: string }) {
 
           {/* Right Column */}
           <div>
-            {/* Call Button */}
+            {/* 2. כפתור חיוג - ללא שם מטופל, פונט גדול יותר, CTA חדש */}
             <a href={`tel:${patient.emergencyPhone}`} style={styles.callBtn}>
               <div style={styles.callBtnTop}>
                 <div>
                   <p style={styles.callBtnLabel}>איש קשר לחירום</p>
-                  <h2 style={styles.callBtnName}>{patient.fullName?.split(' ')[0] || 'איש קשר'}</h2>
-                  <p style={styles.callBtnPhone}>{patient.emergencyPhone}</p>
+                  <p style={{ ...styles.callBtnPhone, fontSize: '20px', fontWeight: 800, color: 'white', marginTop: '4px' }}>{patient.emergencyPhone}</p>
                 </div>
                 <div style={styles.callBtnIcon}>
-                  <Phone size={22} />
+                  <Phone size={26} />
                 </div>
               </div>
-              <div style={styles.callBtnFooter}>לחצו לחיוג עכשיו</div>
+              <div style={{ ...styles.callBtnFooter, fontSize: '15px', fontWeight: 900, padding: '12px' }}>חייג בעת צרה</div>
             </a>
 
-
-
-            {/* Protocol Card */}
-            <div style={styles.protocolCard}>
-              <div style={styles.protocolTitle}>
-                <BriefcaseMedical color="#2563eb" size={18} />
-                כיצד לעזור (פרוטוקול מגיב)
+            {/* 3. מידע רפואי מסווג עם קוד */}
+            <div style={{
+              background: 'white',
+              borderRadius: '20px',
+              padding: '20px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+              marginBottom: '16px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                <AlertTriangle color="#f97316" size={20} style={{ flexShrink: 0 }} />
+                <p style={{ fontWeight: 800, fontSize: '14px', color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0 }}>
+                  ⚠ מידע רפואי קריטי — מסווג
+                </p>
               </div>
 
-              {[
-                { n: "1", t: "הישארו איתי", d: "הישארו נוכחים וגלויים. אל תעזבו אותי לבד." },
-                { n: "2", t: "התקשרו ושתפו מיקום", d: `הודיעו ל${firstName ? firstName : 'איש הקשר'} שאני חווה אפיזודת PTSD. לחצו על הכפתור הכחול למעלה לשיתוף מיקומי בזמן אמת.` },
-                { n: "3", t: "בדקו תעודה רפואית", d: "אם אני לא מגיב, בדקו תעודה רפואית באפליקציית הבריאות בטלפון שלי לנתוני אלרגיות." }
-              ].map((step, i) => (
-                <div key={i} style={styles.protocolStep}>
-                  <div style={styles.stepNum}>{step.n}</div>
-                  <div>
-                    <p style={styles.stepTitle}>{step.t}</p>
-                    <p style={styles.stepDesc}>{step.d}</p>
-                  </div>
-                </div>
-              ))}
-
-              {/* Critical Alert */}
-              <div style={styles.alertBox}>
-                <AlertTriangle color="#f97316" size={22} style={{ flexShrink: 0 }} />
+              {!medicalUnlocked ? (
                 <div>
-                  <p style={styles.alertTitle}>⚠ מידע רפואי קריטי</p>
-                  <p style={styles.alertText}>{patient.notes || 'לא סופק מידע קריטי.'}</p>
+                  <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>הזן קוד גישה לצפייה במידע הרפואי</p>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="password"
+                      value={medicalCode}
+                      onChange={(e) => { setMedicalCode(e.target.value); setCodeError(false); }}
+                      placeholder="קוד גישה"
+                      maxLength={6}
+                      style={{
+                        flex: 1,
+                        padding: '10px 14px',
+                        borderRadius: '12px',
+                        border: codeError ? '2px solid #ef4444' : '2px solid #e2e8f0',
+                        fontSize: '16px',
+                        outline: 'none',
+                        textAlign: 'center',
+                        letterSpacing: '4px',
+                        direction: 'ltr'
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        if (medicalCode === MEDICAL_CODE) {
+                          setMedicalUnlocked(true);
+                          setCodeError(false);
+                        } else {
+                          setCodeError(true);
+                        }
+                      }}
+                      style={{
+                        padding: '10px 18px',
+                        background: '#2563eb',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '12px',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        cursor: 'pointer'
+                      }}
+                    >אשר</button>
+                  </div>
+                  {codeError && <p style={{ color: '#ef4444', fontSize: '11px', marginTop: '6px' }}>קוד שגוי, נסה שנית</p>}
                 </div>
-              </div>
+              ) : (
+                <div style={{
+                  background: '#fff7ed',
+                  borderRadius: '12px',
+                  padding: '14px',
+                  border: '1px solid #fed7aa'
+                }}>
+                  <p style={{ fontSize: '14px', color: '#1e293b', fontWeight: 500, margin: 0 }}>
+                    {patient.notes || 'לא סופק מידע קריטי.'}
+                  </p>
+                </div>
+              )}
             </div>
 
+            {/* 5. כפתור סגירת אירוע */}
             <button onClick={() => setShowReportForm(true)} style={styles.resolveBtn}>
               ✅ סמן אירוע כסגור / סיום אירוע
             </button>
@@ -676,6 +724,28 @@ export default function Emergency({ tagId }: { tagId: string }) {
               <option value="police">🚓 גורמי ביטחון</option>
               <option value="refused_help">❌ סירב לקבל עזרה</option>
             </select>
+            <label style={styles.modalLabel}>תיאור חופשי (אופציונלי)</label>
+            <textarea
+              value={reportData.freeText}
+              onChange={(e) => setReportData({...reportData, freeText: e.target.value})}
+              placeholder="תאר את האירוע, פעולות שננקטו, הערות נוספות..."
+              rows={4}
+              style={{
+                width: '100%',
+                padding: '14px 16px',
+                borderRadius: '14px',
+                border: '2px solid #e2e8f0',
+                marginBottom: '24px',
+                fontSize: '14px',
+                background: '#f8fafc',
+                outline: 'none',
+                color: '#0f172a',
+                resize: 'vertical' as const,
+                fontFamily: 'inherit',
+                lineHeight: 1.5,
+                boxSizing: 'border-box' as const
+              }}
+            />
             <button onClick={submitReport} style={styles.submitBtn}>שלח וסיים אירוע</button>
           </div>
         </div>
