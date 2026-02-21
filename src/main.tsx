@@ -1,27 +1,32 @@
-import React, { useState } from 'react'
-import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import App from './App'
-import Register from './pages/Register'
-import AdminPanel from './pages/AdminPanel'
-import SplashScreen from './components/SplashScreen' // ייבוא המסך החדש
-import './index.css'
+import React, { useState } from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import App from './App';
+import AdminPanel from './pages/AdminPanel';
+import SplashScreen from './components/SplashScreen';
+import './index.css';
 
 const RootComponent = () => {
-  // משתנה שקובע: האם אנחנו עדיין בשלב הטעינה?
+  // ניהול מסך הפתיחה
   const [loading, setLoading] = useState(true);
 
   return (
     <React.StrictMode>
-      {/* אם אנחנו בטעינה - הצג את מסך הפתיחה */}
+      {/* הצגת מסך הפתיחה עד לסיום הטעינה */}
       {loading && <SplashScreen onFinish={() => setLoading(false)} />}
 
-      {/* האפליקציה עצמה (נטענת ברקע) */}
       <BrowserRouter>
         <Routes>
+          {/* הכתובת הראשית מובילה ל-App, והוא כבר יחליט אם לשלוח לחירום או לרישום */}
           <Route path="/" element={<App />} />
-          <Route path="/register" element={<Register />} />
+          
+          {/* נתיב ממוסך עבור מצבי חירום פעילים */}
+          <Route path="/active-emergency-session" element={<App />} />
+
+          {/* נתיב מנהל - ה-App יטפל בהרשאות */}
           <Route path="/admin" element={<AdminPanel />} />
+          
+          {/* במידה והכתובת לא קיימת - חוזרים הביתה */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

@@ -9,8 +9,11 @@ import Emergency from './pages/Emergency';
 import Register from './pages/Register';
 
 function App() {
-  const queryParams = new URLSearchParams(window.location.search);
-  const bid = queryParams.get('bid'); 
+  // שמירת ה-ID בסטייט כדי שישרוד את מחיקת ה-URL (אבטחה)
+  const [bid] = useState(() => {
+    const queryParams = new URLSearchParams(window.location.search);
+    return queryParams.get('bid');
+  }); 
   
   const [isValidTag, setIsValidTag] = useState<boolean | null>(null);
   const hasLogged = useRef(false);
@@ -26,11 +29,10 @@ function App() {
         
         setIsValidTag(exists);
 
-        // --- לוגיקה חדשה: רישום סריקה עם מיקום GPS ---
+        // לוגיקה לרישום סריקה בזמן אמת עם מיקום GPS (עבור האדמין)
         if (exists && !hasLogged.current) {
           hasLogged.current = true;
           
-          // פונקציה פנימית לרישום הלוג
           const logScanWithLocation = async (position: GeolocationPosition | null) => {
             const scanData: any = {
               action: 'SCAN',
@@ -39,13 +41,12 @@ function App() {
               user: 'System'
             };
 
-            // אם הצלחנו להשיג מיקום - מוסיפים אותו
             if (position) {
               scanData.location = {
                 lat: position.coords.latitude,
                 lng: position.coords.longitude
               };
-              scanData.accuracy = position.coords.accuracy; // שומר גם את רמת הדיוק
+              scanData.accuracy = position.coords.accuracy;
             }
 
             try {
@@ -56,22 +57,16 @@ function App() {
             }
           };
 
-          // בקשת מיקום מהדפדפן
           if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(
-              (position) => logScanWithLocation(position), // הצלחה
-              (error) => {
-                console.warn("Location access denied or failed:", error);
-                logScanWithLocation(null); // כישלון - רושמים בלי מיקום
-              },
-              { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+              (position) => logScanWithLocation(position),
+              () => logScanWithLocation(null),
+              { enableHighAccuracy: true, timeout: 5000 }
             );
           } else {
             logScanWithLocation(null);
           }
         }
-        // -------------------------------------------
-
       } catch (error) {
         console.error("Error verifying tag:", error);
         setIsValidTag(false);
@@ -80,23 +75,26 @@ function App() {
     checkTag();
   }, [bid]);
 
+  // אם יש צמיד ב-URL, אנחנו במצב שטח (סריקה)
   if (bid) {
     if (isValidTag === null) {
       return (
         <div style={{height: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', fontFamily: 'sans-serif', background: '#f0f9ff'}}>
           <div style={{fontSize: '40px', marginBottom: '20px'}}>🛰️</div>
-          <h3 style={{color: '#0284c7'}}>מאמת מיקום ונתונים...</h3>
-          <p style={{color: '#64748b', fontSize: '12px'}}>({bid})</p>
+          <h3 style={{color: '#0284c7'}}>מאמת נתונים...</h3>
         </div>
       );
     }
+    // כאן ה-App מעביר את ה-tagId לקומפוננטות - לכן אין שגיאת TypeScript
     return isValidTag ? <Emergency tagId={bid} /> : <Register tagId={bid} />;
   }
 
+  // אם אין צמיד ב-URL, מציגים את נתיבי המערכת (Login / Admin)
   return (
     <Routes>
       <Route path="/" element={<Login />} />
       <Route path="/admin" element={<AdminPanel />} />
+      {/* הגנה נוספת לכל מקרה */}
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
