@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../services/firebase';
-import { collection, getDocs, deleteDoc, doc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc, updateDoc, query, orderBy, limit, addDoc } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -26,6 +26,13 @@ interface Patient {
   idNumber?: string;
 }
 
+// ממשק חדש לרשויות
+interface Authority {
+  id: string;
+  name: string;
+  code: string;
+}
+
 const AdminPanel: React.FC = () => {
   const navigate = useNavigate();
   const isAdmin = sessionStorage.getItem('isAdmin');
@@ -35,6 +42,7 @@ const AdminPanel: React.FC = () => {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [scanFeed, setScanFeed] = useState<any[]>([]);
+  const [authorities, setAuthorities] = useState<Authority[]>([]); // סטייט לרשויות
   const [stats, setStats] = useState({ today: 0, week: 0, month: 0 });
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -62,6 +70,7 @@ const AdminPanel: React.FC = () => {
 
   const fetchData = async () => {
     try {
+      // שליפת מטופלים
       const patSnap = await getDocs(collection(db, 'users')); 
       const patList = patSnap.docs.map(doc => {
         const data = doc.data();
@@ -77,6 +86,16 @@ const AdminPanel: React.FC = () => {
       });
       setPatients(patList);
 
+      // שליפת רשויות ממסד הנתונים
+      try {
+        const authSnap = await getDocs(collection(db, 'organizations'));
+        const authList = authSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Authority));
+        setAuthorities(authList);
+      } catch (e) {
+        console.log("No organizations collection found yet");
+      }
+
+      // שליפת לוגים
       try {
         const q = query(collection(db, 'system_logs'), orderBy('timestamp', 'desc'), limit(500));
         const logSnap = await getDocs(q);
@@ -110,8 +129,9 @@ const AdminPanel: React.FC = () => {
     return `${hours} שעות ו-${minutes} דקות`;
   };
 
+  // פונקציית ייצוא CSV שודרגה לכלול "גוף מטפל"
   const exportToCSV = () => {
-    let csvContent = "תאריך,שעת סריקה ראשונית,שעת סגירת אירוע,משך אירוע,מספר צמיד,מספר סריקות,תוצאת האירוע,הערות צוות\n";
+    let csvContent = "תאריך,שעת סריקה ראשונית,שעת סגירת אירוע,משך אירוע,מספר צמיד,מספר סריקות,תוצאת האירוע,הערות צוות,גוף מטפל\n";
     const clean = (text: any) => (text || '').toString().replace(/,/g, ' ').replace(/\n/g, ' ').trim();
     const MS_IN_24H = 24 * 60 * 60 * 1000;
     const chronologicalLogs = [...logs].sort((a, b) => {
@@ -121,13 +141,14 @@ const AdminPanel: React.FC = () => {
     });
     const activeSessions: { [key: string]: any } = {}; 
     const completedSessions: any[] = []; 
+    
     chronologicalLogs.forEach(log => {
         const bid = log.details;
         const time = log.timestamp?.toDate ? log.timestamp.toDate() : null;
         if (!time) return;
         if (log.action === 'SCAN') {
             if (!activeSessions[bid]) {
-                activeSessions[bid] = { startDate: time, bid: bid, outcome: 'טרם נסגר', notes: '', endDate: null, scanCount: 1 };
+                activeSessions[bid] = { startDate: time, bid: bid, outcome: 'טרם נסגר', notes: '', endDate: null, scanCount: 1, handler: '---' };
             } else {
                 const elapsed = time.getTime() - activeSessions[bid].startDate.getTime();
                 if (elapsed > MS_IN_24H) {
@@ -136,7 +157,7 @@ const AdminPanel: React.FC = () => {
                     oldSession.endDate = null;
                     oldSession.forceStopClock = true;
                     completedSessions.push(oldSession);
-                    activeSessions[bid] = { startDate: time, bid: bid, outcome: 'טרם נסגר', notes: '', endDate: null, scanCount: 1 };
+                    activeSessions[bid] = { startDate: time, bid: bid, outcome: 'טרם נסגר', notes: '', endDate: null, scanCount: 1, handler: '---' };
                 } else {
                     activeSessions[bid].scanCount += 1;
                 }
@@ -148,13 +169,15 @@ const AdminPanel: React.FC = () => {
                 session.outcome = log.outcome;
                 session.notes = log.notes;
                 session.freeText = log.freeText || '';
+                session.handler = log.user || 'לא ידוע'; // שאיבת שם הארגון
                 completedSessions.push(session);
                 delete activeSessions[bid];
             } else {
-                completedSessions.push({ startDate: time, endDate: time, bid: bid, outcome: log.outcome, notes: log.notes, freeText: log.freeText || '', scanCount: 0 });
+                completedSessions.push({ startDate: time, endDate: time, bid: bid, outcome: log.outcome, notes: log.notes, freeText: log.freeText || '', scanCount: 0, handler: log.user || 'לא ידוע' });
             }
         }
     });
+    
     Object.values(activeSessions).forEach(session => {
         const now = new Date();
         const elapsed = now.getTime() - session.startDate.getTime();
@@ -163,6 +186,7 @@ const AdminPanel: React.FC = () => {
         session.endDate = null;
         completedSessions.push(session);
     });
+    
     completedSessions.sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
     completedSessions.forEach(session => {
         const dateStr = session.startDate.toLocaleDateString('he-IL');
@@ -182,10 +206,14 @@ const AdminPanel: React.FC = () => {
         if (outcomeHeb.includes('ambulance')) outcomeHeb = 'פינוי רפואי';
         if (outcomeHeb.includes('family')) outcomeHeb = 'הגעת בן משפחה';
         if (outcomeHeb.includes('refused')) outcomeHeb = 'סירוב לקבלת עזרה';
+        
         const notes = [clean(session.notes), clean(session.freeText)].filter(Boolean).join(' | ');
         const count = session.scanCount || 1;
-        csvContent += `${dateStr},${startTimeStr},${endTimeStr},${durationStr},${session.bid},${count},${outcomeHeb},${notes}\n`;
+        const handler = clean(session.handler);
+        
+        csvContent += `${dateStr},${startTimeStr},${endTimeStr},${durationStr},${session.bid},${count},${outcomeHeb},${notes},${handler}\n`;
     });
+    
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -209,6 +237,36 @@ const AdminPanel: React.FC = () => {
   const handleAddPatient = () => {
     const id = prompt("הכנס מספר צמיד חדש (למשל: 1002):");
     if (id && id.trim().length > 0) window.location.href = `/?bid=${id}`;
+  };
+
+  // פונקציה חדשה - הוספת רשות מטפלת
+  const handleAddAuthority = async () => {
+    if (accessLevel !== 'master') return alert('⛔ רק Master Admin מורשה לבצע פעולה זו');
+    const name = prompt("הכנס את שם הגוף המטפל (לדוגמה: משטרת ישראל):");
+    if (!name || name.trim() === '') return;
+    const code = prompt(`הכנס קוד גישה ייעודי עבור ${name} (למשל: 100):`);
+    if (!code || code.trim() === '') return;
+
+    try {
+      await addDoc(collection(db, 'organizations'), { name, code });
+      fetchData(); // ריענון הנתונים
+    } catch (error) {
+      console.error("Error adding authority", error);
+      alert("שגיאה בהוספת הרשות.");
+    }
+  };
+
+  // פונקציה חדשה - מחיקת רשות מטפלת
+  const handleDeleteAuthority = async (authId: string) => {
+    if (accessLevel !== 'master') return;
+    if (window.confirm('האם אתה בטוח שברצונך למחוק רשות זו? קוד הגישה שלה יבוטל.')) {
+      try {
+        await deleteDoc(doc(db, 'organizations', authId));
+        fetchData();
+      } catch (error) {
+        console.error("Error deleting authority", error);
+      }
+    }
   };
 
   const safeIsToday = (timestamp: any) => {
@@ -304,29 +362,19 @@ const AdminPanel: React.FC = () => {
     <>
       <style>{`
         .admin-wrapper { padding: 20px; direction: rtl; font-family: Segoe UI, Arial; background-color: #f3f4f6; min-height: 100vh; }
-        
-        /* Header */
         .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; background-color: white; padding: 15px 25px; border-radius: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 12px; }
         .admin-header-left { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
         .admin-header-right { display: flex; align-items: center; gap: 20px; }
-
-        /* Stats grid */
         .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
-
-        /* Main content grid: table + feed */
         .main-grid { display: grid; grid-template-columns: 4fr 1fr; gap: 25px; margin-bottom: 30px; }
-
-        /* Patients table header row */
         .table-header-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f3f4f6; padding-bottom: 15px; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
         .table-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
-        /* Responsive: tablet */
         @media (max-width: 900px) {
           .main-grid { grid-template-columns: 1fr; }
           .stats-grid { grid-template-columns: repeat(3, 1fr); }
         }
 
-        /* Responsive: mobile */
         @media (max-width: 600px) {
           .admin-wrapper { padding: 12px; }
           .admin-header { padding: 12px 16px; }
@@ -338,7 +386,7 @@ const AdminPanel: React.FC = () => {
           .table-actions button { flex: 1; font-size: 12px; padding: 8px 10px; }
           .search-input { width: 100% !important; }
           .patients-table th, .patients-table td { padding: 8px 6px; font-size: 13px; }
-          .patients-table th:nth-child(3), .patients-table td:nth-child(3) { display: none; } /* hide district on mobile */
+          .patients-table th:nth-child(3), .patients-table td:nth-child(3) { display: none; }
           .map-container { height: 300px !important; }
           .scan-feed { height: auto !important; max-height: 350px; }
           .patients-panel { height: auto !important; max-height: 450px; }
@@ -439,12 +487,34 @@ const AdminPanel: React.FC = () => {
                           <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: status.color }} title={status.label}></div>
                       </div>
                       <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '5px' }}>{log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString() : '---'}</div>
-                      <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0d6efd', marginTop: '5px' }}>{log.details}</div>
-                      {log.outcome && <div style={{ fontSize: '12px', color: '#059669', marginTop: '3px', fontWeight: 'bold' }}>{log.outcome === 'calmed_down' ? 'הרגעה' : log.outcome} ({log.duration_text})</div>}
+                      <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0d6efd', marginTop: '5px' }}>צמיד: {log.details}</div>
+                      {log.outcome && <div style={{ fontSize: '12px', color: '#059669', marginTop: '3px', fontWeight: 'bold' }}>{log.outcome === 'calmed_down' ? 'הרגעה' : log.outcome}</div>}
                     </div>
                  );
               })}
             </div>
+          </div>
+        </div>
+
+        {/* קוביית ניהול רשויות חדשה */}
+        <div style={{ backgroundColor: 'white', borderRadius: '15px', padding: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', marginBottom: '30px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #f3f4f6', paddingBottom: '15px', marginBottom: '15px' }}>
+             <h3 style={{ margin: 0 }}>🏢 ניהול רשויות וקודי גישה</h3>
+             <button onClick={handleAddAuthority} style={{ background: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>➕ הוסף גוף מטפל</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '15px' }}>
+             {authorities.map(auth => (
+                 <div key={auth.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+                    <div>
+                       <div style={{ fontWeight: 'bold', color: '#0f172a', fontSize: '16px' }}>{auth.name}</div>
+                       <div style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>קוד גישה לשטח: <span style={{letterSpacing: '2px', fontWeight: '900', color: '#2563eb'}}>{auth.code}</span></div>
+                    </div>
+                    {accessLevel === 'master' && (
+                       <button onClick={() => handleDeleteAuthority(auth.id)} style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer' }} title="מחק רשות">🗑️</button>
+                    )}
+                 </div>
+             ))}
+             {authorities.length === 0 && <p style={{ color: '#94a3b8' }}>לא הוגדרו רשויות במערכת עדיין.</p>}
           </div>
         </div>
 

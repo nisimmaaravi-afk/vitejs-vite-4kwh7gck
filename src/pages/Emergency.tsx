@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import {
   Phone, Heart, VolumeX, Hand, PersonStanding,
@@ -23,12 +23,19 @@ export default function Emergency({ tagId }: { tagId: string }) {
   const [showReportForm, setShowReportForm] = useState(false);
   const [eventType, setEventType] = useState<'real' | 'test'>('real');
   const [reportData, setReportData] = useState({ outcome: 'calmed_down', notes: '', freeText: '' });
+  
   const [medicalCode, setMedicalCode] = useState('');
   const [medicalUnlocked, setMedicalUnlocked] = useState(false);
   const [codeError, setCodeError] = useState(false);
+  const [isCheckingCode, setIsCheckingCode] = useState(false); // סטייט לטעינה בזמן בדיקת קוד
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(false);
-  const MEDICAL_CODE = '1010';
+  
+  // הסטייט הקריטי ששומר מי הגוף שטיפל באירוע
+  const [handlerOrg, setHandlerOrg] = useState<string>('אזרח / לא ידוע');
+
+  const MASTER_CODE = '65942229';
 
   const getFirstName = (name: string): string => {
     if (!name) return 'המטופל';
@@ -42,7 +49,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
         const docSnap = await getDoc(doc(db, 'users', tagId));
         if (docSnap.exists()) {
           setPatient(docSnap.data() as PatientData);
-          // מיסוך כתובת ה-URL מיד לאחר קבלת הנתונים
           window.history.replaceState(null, '', '/active-emergency-session');
         } else {
           console.error("Patient not found");
@@ -63,6 +69,52 @@ export default function Emergency({ tagId }: { tagId: string }) {
     }
   }, [reportSubmitted]);
 
+  // פונקציה חכמה לאימות הקוד מול Firebase רק בזמן לחיצה
+  const verifyMedicalCode = async () => {
+    if (!medicalCode) return;
+    setIsCheckingCode(true);
+    setCodeError(false);
+
+    // 1. קודם בודקים אם זה המאסטר שלנו
+    if (medicalCode === MASTER_CODE) {
+      setMedicalUnlocked(true);
+      setHandlerOrg('Master Admin');
+      setIsCheckingCode(false);
+      return;
+    }
+
+    try {
+      // 2. חיפוש דינמי ב-Firebase מול הרשויות שהקמת באדמין
+      const orgsRef = collection(db, 'organizations');
+      const q = query(orgsRef, where('code', '==', medicalCode));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        // מצאנו התאמה ברשויות!
+        const orgData = querySnapshot.docs[0].data();
+        setMedicalUnlocked(true);
+        setHandlerOrg(orgData.name); // שומר את שם הגוף המטפל
+      } else {
+        // 3. Fallback לבדיקה - אם לא הוקם ב-DB, נבדוק את הקודים הסטטיים שביקשת
+        if (medicalCode === '1000') {
+          setMedicalUnlocked(true);
+          setHandlerOrg('משטרה (בדיקה)');
+        } else if (medicalCode === '1001') {
+          setMedicalUnlocked(true);
+          setHandlerOrg('מד"א (בדיקה)');
+        } else {
+          // שום דבר לא תאם
+          setCodeError(true);
+        }
+      }
+    } catch (error) {
+      console.error("Error verifying code with DB", error);
+      setCodeError(true);
+    } finally {
+      setIsCheckingCode(false);
+    }
+  };
+
   const submitReport = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -80,7 +132,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
         notes: reportData.notes || '',
         freeText: eventType === 'test' ? 'בדיקת תקינות יזומה' : (reportData.freeText?.trim() || ''),
         timestamp: serverTimestamp(),
-        user: 'Scanner',
+        user: handlerOrg, // <--- כאן נשתל השם של הרשות!
         appVersion: '2.0.0-PRO',
       });
       setReportSubmitted(true);
@@ -113,8 +165,8 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </h2>
           <p style={{ fontSize: '16px', color: '#64748b', marginBottom: '28px', lineHeight: 1.6 }}>
             {eventType === 'test' 
-              ? 'המערכת תקינה ומוכנה לזמן אמת. הנתונים נשמרו בלוג המערכת כבדיקה בלבד.'
-              : <><strong style={{ color: '#0f172a' }}>{firstName}</strong> מודה לך מקרב לב על העזרה. האירוע נסגר בבטחה.</>}
+              ? `המערכת תקינה. הנתונים נשמרו בלוג המערכת תחת הגוף: ${handlerOrg}`
+              : <><strong style={{ color: '#0f172a' }}>{firstName}</strong> מודה לך מקרב לב על העזרה. האירוע נסגר בבטחה על ידי {handlerOrg}.</>}
           </p>
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '24px', marginBottom: '28px' }}>
             <p style={{ fontSize: '15px', fontWeight: 600, color: '#334155', fontStyle: 'italic', lineHeight: 1.6 }}>
@@ -223,17 +275,24 @@ export default function Emergency({ tagId }: { tagId: string }) {
                 value={medicalCode}
                 onChange={(e) => { setMedicalCode(e.target.value); setCodeError(false); }}
                 placeholder="••••"
-                maxLength={6}
-                style={{ width: '100px', padding: '8px 12px', borderRadius: '10px', border: codeError ? '2px solid #ef4444' : '2px solid #e2e8f0', fontSize: '18px', outline: 'none', textAlign: 'center', letterSpacing: '6px', direction: 'ltr' }}
+                maxLength={8}
+                style={{ width: '100px', padding: '8px 12px', borderRadius: '10px', border: codeError ? '2px solid #ef4444' : '2px solid #e2e8f0', fontSize: '18px', outline: 'none', textAlign: 'center', letterSpacing: '2px', direction: 'ltr' }}
               />
               <button
-                onClick={() => { if (medicalCode === MEDICAL_CODE) { setMedicalUnlocked(true); setCodeError(false); } else { setCodeError(true); } }}
-                style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
-              >אשר</button>
-              {codeError && <p style={{ color: '#ef4444', fontSize: '11px', margin: 0 }}>קוד שגוי</p>}
+                onClick={verifyMedicalCode}
+                disabled={isCheckingCode}
+                style={{ padding: '8px 16px', background: isCheckingCode ? '#94a3b8' : '#2563eb', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: isCheckingCode ? 'wait' : 'pointer' }}
+              >
+                {isCheckingCode ? 'בודק...' : 'אשר'}
+              </button>
+              {codeError && <p style={{ color: '#ef4444', fontSize: '11px', margin: 0, width: '100%' }}>קוד לא מזוהה במערכת</p>}
             </div>
           ) : (
             <div style={{ background: '#fff7ed', borderRadius: '12px', padding: '12px 16px', border: '1px solid #fed7aa' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid #fdba74', paddingBottom: '8px' }}>
+                 <p style={{ fontSize: '11px', color: '#c2410c', fontWeight: 800, margin: 0 }}>מידע פתוח לגורם מורשה:</p>
+                 <span style={{ fontSize: '11px', background: '#ffedd5', padding: '2px 8px', borderRadius: '10px', color: '#9a3412', fontWeight: 700 }}>{handlerOrg}</span>
+              </div>
               <p style={{ fontSize: '14px', color: '#1e293b', fontWeight: 500, margin: 0, lineHeight: 1.6 }}>
                 {patient.notes || 'לא סופק מידע קריטי.'}
               </p>
