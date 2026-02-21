@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Shield } from 'lucide-react';
-import { useNavigate } from 'react-router-dom'; // ייבוא של מנגנון הניווט הנכון
+import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
   const [accessCode, setAccessCode] = useState('');
   const [isAttempting, setIsAttempting] = useState(false);
   const [loginError, setLoginError] = useState(false);
   
-  const navigate = useNavigate(); // הפעלת מנגנון הניווט
+  const navigate = useNavigate();
 
   // הקודים של Recognition Live למערכת השליטה
   const MASTER_CODE = '65942229';
@@ -24,15 +24,14 @@ export default function Login() {
         sessionStorage.setItem('isAdmin', 'true');
         sessionStorage.setItem('userRole', 'master'); 
         
-        // מעבר חלק ללא רענון דפדפן
         navigate('/admin'); 
         
       } else if (accessCode === FIELD_CODE) {
-        console.log("התחברות מאושרת (שטח) - מעביר לתצוגת שטח...");
+        console.log("התחברות מאושרת (שטח) - מעביר לפאנל ניהול בהרשאת שטח...");
         sessionStorage.setItem('isAdmin', 'true');
         sessionStorage.setItem('userRole', 'field'); 
         
-        navigate('/field-view'); 
+        navigate('/admin'); 
         
       } else {
         console.error("קוד שגוי");
