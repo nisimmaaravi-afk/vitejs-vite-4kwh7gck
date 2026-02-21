@@ -21,6 +21,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
   const [patient, setPatient] = useState<PatientData | null>(null);
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [showReportForm, setShowReportForm] = useState(false);
+  const [eventType, setEventType] = useState<'real' | 'test'>('real');
   const [reportData, setReportData] = useState({ outcome: 'calmed_down', notes: '', freeText: '' });
   const [medicalCode, setMedicalCode] = useState('');
   const [medicalUnlocked, setMedicalUnlocked] = useState(false);
@@ -37,8 +38,18 @@ export default function Emergency({ tagId }: { tagId: string }) {
   useEffect(() => {
     const fetchPatient = async () => {
       if (!tagId) return;
-      const docSnap = await getDoc(doc(db, 'users', tagId));
-      if (docSnap.exists()) setPatient(docSnap.data() as PatientData);
+      try {
+        const docSnap = await getDoc(doc(db, 'users', tagId));
+        if (docSnap.exists()) {
+          setPatient(docSnap.data() as PatientData);
+          // מיסוך כתובת ה-URL מיד לאחר קבלת הנתונים
+          window.history.replaceState(null, '', '/active-emergency-session');
+        } else {
+          console.error("Patient not found");
+        }
+      } catch (error) {
+        console.error("Error fetching patient data", error);
+      }
     };
     fetchPatient();
   }, [tagId]);
@@ -57,16 +68,17 @@ export default function Emergency({ tagId }: { tagId: string }) {
     setIsSubmitting(true);
     setSubmitError(false);
     try {
-      if (!tagId || !reportData.outcome) {
-        throw new Error('Missing critical data');
-      }
-      console.log('Submitting report:', JSON.stringify(reportData));
+      if (!tagId) throw new Error('Missing critical data');
+
+      const dbAction = eventType === 'test' ? 'SYSTEM_TEST' : 'EVENT_RESOLVED';
+      const dbOutcome = eventType === 'test' ? 'test_successful' : reportData.outcome;
+
       await addDoc(collection(db, 'system_logs'), {
-        action: 'EVENT_RESOLVED',
+        action: dbAction,
         details: tagId,
-        outcome: reportData.outcome,
+        outcome: dbOutcome,
         notes: reportData.notes || '',
-        freeText: reportData.freeText?.trim() || '',
+        freeText: eventType === 'test' ? 'בדיקת תקינות יזומה' : (reportData.freeText?.trim() || ''),
         timestamp: serverTimestamp(),
         user: 'Scanner',
         appVersion: '2.0.0-PRO',
@@ -80,8 +92,8 @@ export default function Emergency({ tagId }: { tagId: string }) {
   };
 
   if (!patient) return (
-    <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
-      טוען נתונים...
+    <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', background: '#F0F4F8', color: '#0f172a', fontWeight: 700 }}>
+      טוען נתונים מאובטחים...
     </div>
   );
 
@@ -95,10 +107,14 @@ export default function Emergency({ tagId }: { tagId: string }) {
         textAlign: 'center', direction: 'rtl', fontFamily: "'Segoe UI', system-ui, sans-serif"
       }}>
         <div style={{ background: 'white', padding: '48px', borderRadius: '24px', boxShadow: '0 20px 60px rgba(0,0,0,0.1)', maxWidth: '480px', width: '100%' }}>
-          <CheckCircle size={72} color="#22c55e" style={{ margin: '0 auto 24px' }} />
-          <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#0f172a', marginBottom: '12px' }}>תודה רבה!</h2>
+          <CheckCircle size={72} color={eventType === 'test' ? "#3b82f6" : "#22c55e"} style={{ margin: '0 auto 24px' }} />
+          <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#0f172a', marginBottom: '12px' }}>
+            {eventType === 'test' ? 'הבדיקה עברה בהצלחה' : 'תודה רבה!'}
+          </h2>
           <p style={{ fontSize: '16px', color: '#64748b', marginBottom: '28px', lineHeight: 1.6 }}>
-            <strong style={{ color: '#0f172a' }}>{firstName}</strong> מודה לך מקרב לב על העזרה. האירוע נסגר בבטחה.
+            {eventType === 'test' 
+              ? 'המערכת תקינה ומוכנה לזמן אמת. הנתונים נשמרו בלוג המערכת כבדיקה בלבד.'
+              : <><strong style={{ color: '#0f172a' }}>{firstName}</strong> מודה לך מקרב לב על העזרה. האירוע נסגר בבטחה.</>}
           </p>
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '24px', marginBottom: '28px' }}>
             <p style={{ fontSize: '15px', fontWeight: 600, color: '#334155', fontStyle: 'italic', lineHeight: 1.6 }}>
@@ -106,7 +122,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
             </p>
           </div>
           <div style={{ width: '100%', background: '#e2e8f0', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
-            <div style={{ background: '#22c55e', height: '100%', animation: 'progress 15s linear forwards', transformOrigin: 'left' }} />
+            <div style={{ background: eventType === 'test' ? '#3b82f6' : '#22c55e', height: '100%', animation: 'progress 15s linear forwards', transformOrigin: 'left' }} />
           </div>
           <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '12px' }}>מנקה נתונים ויוצא בעוד 15 שניות...</p>
         </div>
@@ -117,8 +133,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#F0F4F8', fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", color: '#0f172a', paddingBottom: '40px' }}>
-
-      {/* Header */}
       <header style={{
         background: 'white', padding: '12px 20px', display: 'flex', justifyContent: 'space-between',
         alignItems: 'center', borderBottom: '1px solid #e2e8f0', position: 'sticky', top: 0, zIndex: 50,
@@ -134,15 +148,11 @@ export default function Emergency({ tagId }: { tagId: string }) {
       </header>
 
       <main style={{ maxWidth: '960px', margin: '0 auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-
         <h1 style={{ fontSize: '20px', fontWeight: 900, color: '#0f172a', margin: 0 }}>
           פרופיל חירום: {patient.fullName}
         </h1>
 
-        {/* שורה עליונה: תמונה + כפתור חיוג */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'stretch' }}>
-
-          {/* תמונה */}
           <div style={{ borderRadius: '16px', overflow: 'hidden', background: '#cbd5e1', position: 'relative', minHeight: '160px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
             {patient.photoURL ? (
               <img src={patient.photoURL} alt="Patient" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -155,7 +165,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
             </div>
           </div>
 
-          {/* כפתור חיוג */}
           <a href={`tel:${patient.emergencyPhone}`} style={{
             display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
             background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
@@ -176,7 +185,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </a>
         </div>
 
-        {/* פרוטוקול הכרה */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           <div style={{ fontWeight: 800, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#2563eb' }}>
             <Heart size={18} fill="#2563eb" color="#2563eb" />
@@ -200,7 +208,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </div>
         </div>
 
-        {/* מידע רפואי קריטי */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
             <AlertTriangle color="#f97316" size={18} style={{ flexShrink: 0 }} />
@@ -234,14 +241,12 @@ export default function Emergency({ tagId }: { tagId: string }) {
           )}
         </div>
 
-        {/* כפתור סגירת אירוע */}
         <button onClick={() => setShowReportForm(true)} style={{ width: '100%', padding: '12px', background: 'none', border: 'none', color: '#94a3b8', fontSize: '12px', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>
-          ✅ סמן אירוע כסגור / סיום אירוע
+          ✅ סמן אירוע כסגור / בדיקת תקינות
         </button>
 
       </main>
 
-      {/* Footer */}
       <footer style={{ marginTop: '24px', padding: '24px', borderTop: '1px solid #e2e8f0', textAlign: 'center', background: 'white' }}>
         <p style={{ fontSize: '15px', fontWeight: 600, color: '#334155', fontStyle: 'italic', marginBottom: '16px', direction: 'rtl' }}>
           "פוסט טראומה היא תווית שלא מבקשים, אבל הכרה היא תווית שכולנו ראויים לה."
@@ -253,42 +258,79 @@ export default function Emergency({ tagId }: { tagId: string }) {
         </div>
       </footer>
 
-      {/* מודל סיום אירוע */}
       {showReportForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '16px', direction: 'rtl' }}>
-          <div style={{ background: 'white', borderRadius: '28px', padding: '40px', width: '100%', maxWidth: '400px', boxShadow: '0 25px 80px rgba(0,0,0,0.2)', position: 'relative' }}>
+          <div style={{ background: 'white', borderRadius: '28px', padding: '32px', width: '100%', maxWidth: '400px', boxShadow: '0 25px 80px rgba(0,0,0,0.2)', position: 'relative' }}>
             <button onClick={() => setShowReportForm(false)} style={{ position: 'absolute', top: '20px', left: '20px', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
               <X size={22} />
             </button>
-            <h3 style={{ fontWeight: 900, fontSize: '22px', textAlign: 'center', marginBottom: '24px', color: '#0f172a' }}>סיום אירוע</h3>
-            <label style={{ fontWeight: 700, display: 'block', marginBottom: '8px', color: '#334155', fontSize: '13px' }}>כיצד הסתיים האירוע?</label>
-            <select
-              value={reportData.outcome}
-              onChange={(e) => { const val = e.target.value; setReportData(prev => ({ ...prev, outcome: val })); }}
-              style={{ width: '100%', padding: '14px 16px', borderRadius: '14px', border: '2px solid #e2e8f0', marginBottom: '16px', fontSize: '16px', background: '#f8fafc', outline: 'none', color: '#0f172a' }}
-            >
-              <option value="calmed_down">✅ הרגעה במקום</option>
-              <option value="family_arrived">👨‍👩‍👧‍👦 הגעת בן משפחה</option>
-              <option value="ambulance">🚑 פינוי באמבולנס</option>
-              <option value="police">🚓 גורמי ביטחון</option>
-              <option value="refused_help">❌ סירב לקבל עזרה</option>
-            </select>
-            <label style={{ fontWeight: 700, display: 'block', marginBottom: '8px', color: '#334155', fontSize: '13px' }}>תיאור חופשי (אופציונלי)</label>
-            <textarea
-              value={reportData.freeText}
-              onChange={(e) => { const val = e.target.value; setReportData(prev => ({ ...prev, freeText: val })); }}
-              onInput={(e) => { const val = (e.target as HTMLTextAreaElement).value; setReportData(prev => ({ ...prev, freeText: val })); }}
-              placeholder="תאר את האירוע, פעולות שננקטו, הערות נוספות..."
-              rows={4}
-              style={{ width: '100%', padding: '14px 16px', borderRadius: '14px', border: '2px solid #e2e8f0', marginBottom: '24px', fontSize: '14px', background: '#f8fafc', outline: 'none', color: '#0f172a', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }}
-            />
+            
+            <h3 style={{ fontWeight: 900, fontSize: '22px', textAlign: 'center', marginBottom: '20px', color: '#0f172a' }}>סיום פעולה</h3>
+            
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', background: '#f1f5f9', padding: '6px', borderRadius: '16px' }}>
+              <button
+                onClick={() => setEventType('real')}
+                style={{ flex: 1, padding: '10px', borderRadius: '12px', border: 'none', background: eventType === 'real' ? 'white' : 'transparent', color: eventType === 'real' ? '#ef4444' : '#64748b', fontWeight: 800, fontSize: '14px', boxShadow: eventType === 'real' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', transition: 'all 0.2s' }}
+              >
+                🚨 אירוע אמת
+              </button>
+              <button
+                onClick={() => setEventType('test')}
+                style={{ flex: 1, padding: '10px', borderRadius: '12px', border: 'none', background: eventType === 'test' ? 'white' : 'transparent', color: eventType === 'test' ? '#3b82f6' : '#64748b', fontWeight: 800, fontSize: '14px', boxShadow: eventType === 'test' ? '0 2px 8px rgba(0,0,0,0.05)' : 'none', cursor: 'pointer', transition: 'all 0.2s' }}
+              >
+                🔧 בדיקת מערכת
+              </button>
+            </div>
+
+            {eventType === 'real' ? (
+              <>
+                <label style={{ fontWeight: 700, display: 'block', marginBottom: '8px', color: '#334155', fontSize: '13px' }}>כיצד הסתיים האירוע?</label>
+                <select
+                  value={reportData.outcome}
+                  onChange={(e) => { const val = e.target.value; setReportData(prev => ({ ...prev, outcome: val })); }}
+                  style={{ width: '100%', padding: '14px 16px', borderRadius: '14px', border: '2px solid #e2e8f0', marginBottom: '16px', fontSize: '16px', background: '#f8fafc', outline: 'none', color: '#0f172a' }}
+                >
+                  <option value="calmed_down">✅ הרגעה במקום</option>
+                  <option value="family_arrived">👨‍👩‍👧‍👦 הגעת בן משפחה</option>
+                  <option value="ambulance">🚑 פינוי באמבולנס</option>
+                  <option value="police">🚓 גורמי ביטחון</option>
+                  <option value="refused_help">❌ סירב לקבל עזרה</option>
+                </select>
+                <label style={{ fontWeight: 700, display: 'block', marginBottom: '8px', color: '#334155', fontSize: '13px' }}>תיאור חופשי (אופציונלי)</label>
+                <textarea
+                  value={reportData.freeText}
+                  onChange={(e) => { const val = e.target.value; setReportData(prev => ({ ...prev, freeText: val })); }}
+                  placeholder="תאר את האירוע, פעולות שננקטו, הערות נוספות..."
+                  rows={3}
+                  style={{ width: '100%', padding: '14px 16px', borderRadius: '14px', border: '2px solid #e2e8f0', marginBottom: '24px', fontSize: '14px', background: '#f8fafc', outline: 'none', color: '#0f172a', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }}
+                />
+              </>
+            ) : (
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '14px', padding: '16px', marginBottom: '24px', textAlign: 'center' }}>
+                <p style={{ color: '#1e3a8a', fontSize: '14px', fontWeight: 600, margin: 0, lineHeight: 1.5 }}>
+                  סריקה זו תתועד כבדיקת תקינות מערכתית בלבד ולא תיחשב כאירוע חירום בסטטיסטיקות הרשמיות.
+                </p>
+              </div>
+            )}
+
             {submitError && (
               <p style={{ color: '#ef4444', fontSize: '13px', textAlign: 'center', marginBottom: '12px', fontWeight: 600 }}>
                 ⚠ שגיאה בשליחה, אנא נסה שנית
               </p>
             )}
-            <button onClick={submitReport} disabled={isSubmitting} style={{ width: '100%', padding: '18px', background: isSubmitting ? '#86efac' : '#22c55e', color: 'white', border: 'none', borderRadius: '18px', fontWeight: 900, fontSize: '18px', cursor: isSubmitting ? 'not-allowed' : 'pointer', boxShadow: '0 8px 24px rgba(34,197,94,0.3)', transition: 'background 0.2s' }}>
-              {isSubmitting ? 'שולח...' : 'שלח וסיים אירוע'}
+            
+            <button 
+              onClick={submitReport} 
+              disabled={isSubmitting} 
+              style={{ 
+                width: '100%', padding: '18px', 
+                background: isSubmitting ? '#94a3b8' : (eventType === 'test' ? '#3b82f6' : '#22c55e'), 
+                color: 'white', border: 'none', borderRadius: '18px', fontWeight: 900, fontSize: '18px', 
+                cursor: isSubmitting ? 'not-allowed' : 'pointer', 
+                boxShadow: eventType === 'test' ? '0 8px 24px rgba(59,130,246,0.3)' : '0 8px 24px rgba(34,197,94,0.3)', 
+                transition: 'background 0.2s' 
+              }}>
+              {isSubmitting ? 'שולח...' : (eventType === 'test' ? 'סיים בדיקה' : 'שלח וסיים אירוע')}
             </button>
           </div>
         </div>
