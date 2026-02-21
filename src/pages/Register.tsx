@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"; // הוספנו את זה
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-export default function Register({ tagId }: { tagId: string }) {
+// הגדרת ה-Props כדי למנוע שגיאות TypeScript
+interface RegisterProps {
+  tagId: string;
+}
+
+export default function Register({ tagId }: RegisterProps) {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({ phone: '', id: '', emergency: '' });
   
-  // הוספת סטייט לתמונה
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -47,17 +51,13 @@ export default function Register({ tagId }: { tagId: string }) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
-    if (e.target.name === 'patientPhone') setErrors({ ...errors, phone: '' });
-    if (e.target.name === 'emergencyPhone') setErrors({ ...errors, emergency: '' });
-    if (e.target.name === 'idNumber') setErrors({ ...errors, id: '' });
   };
 
-  // פונקציה חדשה לטיפול בבחירת תמונה
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setImageFile(file);
-      setPreviewUrl(URL.createObjectURL(file)); // יצירת תצוגה מקדימה
+      setPreviewUrl(URL.createObjectURL(file));
     }
   };
 
@@ -69,7 +69,6 @@ export default function Register({ tagId }: { tagId: string }) {
     try {
       let photoURL = "";
 
-      // 1. העלאת תמונה אם נבחרה
       if (imageFile) {
         const storage = getStorage();
         const storageRef = ref(storage, `patients/${tagId}/profile_${Date.now()}`);
@@ -77,15 +76,17 @@ export default function Register({ tagId }: { tagId: string }) {
         photoURL = await getDownloadURL(snapshot.ref);
       }
 
-      // 2. שמירת הנתונים ב-Firestore יחד עם ה-URL של התמונה
+      // שמירת הנתונים ב-Firestore עבור Recognition Live
       await setDoc(doc(db, "users", tagId), {
         ...formData,
         tagId: tagId,
-        photoURL: photoURL, // הוספת הקישור לתמונה
+        photoURL: photoURL,
         createdAt: new Date(),
         firstName: formData.fullName.split(' ')[0], 
         lastName: formData.fullName.split(' ').slice(1).join(' ') || '',
       });
+      
+      // ריענון העמוד כדי לעבור למסך החירום המעודכן
       window.location.href = `/?bid=${tagId}`;
     } catch (error) {
       console.error("Error registering:", error);
@@ -98,15 +99,9 @@ export default function Register({ tagId }: { tagId: string }) {
     <div style={{ minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'linear-gradient(180deg, #e0f2fe 0%, #bae6fd 100%)', direction: 'rtl', fontFamily: 'Segoe UI, sans-serif' }}>
       <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '25px', width: '90%', maxWidth: '380px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', position: 'relative', marginTop: '30px', marginBottom: '30px' }}>
         
-        {/* שינינו את ה-div ל-label כדי לאפשר לחיצה */}
         <div style={{ position: 'absolute', top: '-40px', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
             <label style={{ cursor: 'pointer' }}>
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  onChange={handleImageChange} 
-                  style={{ display: 'none' }} 
-                />
+                <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
                 <div style={{ width: '80px', height: '80px', backgroundColor: 'black', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', border: '4px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
                     {previewUrl ? (
                       <img src={previewUrl} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -121,6 +116,7 @@ export default function Register({ tagId }: { tagId: string }) {
         </div>
 
         <div style={{ marginTop: '40px' }}>
+            <h2 style={{ textAlign: 'center', color: '#0f172a', marginBottom: '20px' }}>Recognition Live - רישום</h2>
             <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             
             <div>
@@ -134,15 +130,14 @@ export default function Register({ tagId }: { tagId: string }) {
                 {errors.id && <span style={errorTextStyle}>{errors.id}</span>}
             </div>
 
-            {/* בחירת עיר ומחוז - רק 3 אפשרויות */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                    <label style={labelStyle}>עיר מגורים:</label>
-                    <input type="text" name="city" placeholder="שם העיר" onChange={handleChange} required style={inputStyle} />
+                    <label style={labelStyle}>עיר:</label>
+                    <input type="text" name="city" placeholder="עיר" onChange={handleChange} required style={inputStyle} />
                 </div>
                 <div>
                     <label style={labelStyle}>מחוז:</label>
-                    <select name="district" onChange={handleChange} required style={{...inputStyle, appearance: 'none', backgroundImage: 'none'}}>
+                    <select name="district" onChange={handleChange} required style={{...inputStyle, appearance: 'none'}}>
                         <option value="">בחר...</option>
                         <option value="center">מרכז</option>
                         <option value="north">צפון</option>
@@ -157,38 +152,24 @@ export default function Register({ tagId }: { tagId: string }) {
                 {errors.phone && <span style={errorTextStyle}>{errors.phone}</span>}
             </div>
 
-            <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '15px', marginTop: '5px' }}>
-                <label style={{ ...labelStyle, color: '#dc2626', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                 📞 איש קשר לחירום (חובה):
-                </label>
-                <input type="tel" name="emergencyPhone" placeholder="מספר של קרוב משפחה" onChange={handleChange} required style={{ ...inputStyle, backgroundColor: '#fef2f2', borderColor: errors.emergency ? 'red' : '#fecaca' }} />
+            <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: '15px' }}>
+                <label style={{ ...labelStyle, color: '#dc2626' }}>📞 איש קשר לחירום (חובה):</label>
+                <input type="tel" name="emergencyPhone" placeholder="מספר חירום" onChange={handleChange} required style={{ ...inputStyle, backgroundColor: '#fef2f2' }} />
                 {errors.emergency && <span style={errorTextStyle}>{errors.emergency}</span>}
             </div>
 
             <div>
-                <label style={labelStyle}>📝 מידע רפואי / הערות:</label>
-                <textarea name="notes" placeholder="רגישויות, מחלות רקע, תרופות..." onChange={handleChange} rows={3} style={{ ...inputStyle, height: 'auto' }} />
+                <label style={labelStyle}>📝 מידע רפואי:</label>
+                <textarea name="notes" placeholder="רגישויות, מחלות רקע..." onChange={handleChange} rows={3} style={{ ...inputStyle, height: 'auto' }} />
             </div>
 
             <button type="submit" disabled={loading} style={{ 
-                marginTop: '10px', 
-                padding: '15px', 
-                background: 'linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%)', 
-                color: 'white', 
-                border: 'none', 
-                borderRadius: '10px', 
-                fontSize: '18px', 
-                fontWeight: 'bold', 
-                cursor: loading ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
+                marginTop: '10px', padding: '15px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer'
             }}>
                 {loading ? 'שומר נתונים...' : '✅ בצע רישום'}
             </button>
             
-            <div style={{textAlign: 'center', fontSize: '12px', color: '#94a3b8', marginTop: '10px'}}>
-                מספר צמיד: {tagId}
-            </div>
-
+            <div style={{textAlign: 'center', fontSize: '12px', color: '#94a3b8'}}>צמיד: {tagId}</div>
             </form>
         </div>
       </div>
@@ -197,6 +178,6 @@ export default function Register({ tagId }: { tagId: string }) {
 }
 
 const labelStyle = { fontSize: '14px', fontWeight: 'bold', color: '#334155', marginBottom: '5px', display: 'block' };
-const inputStyle = { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '16px', outline: 'none', boxSizing: 'border-box' as 'border-box', backgroundColor: '#f8fafc' };
-const errorInputStyle = { ...inputStyle, border: '1px solid #ef4444', backgroundColor: '#fff1f2' };
-const errorTextStyle = { color: '#ef4444', fontSize: '12px', marginTop: '2px', display: 'block' };
+const inputStyle = { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' as 'border-box' };
+const errorInputStyle = { ...inputStyle, border: '1px solid #ef4444' };
+const errorTextStyle = { color: '#ef4444', fontSize: '12px', marginTop: '2px' };
