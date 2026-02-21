@@ -147,10 +147,11 @@ const AdminPanel: React.FC = () => {
                 session.endDate = time;
                 session.outcome = log.outcome;
                 session.notes = log.notes;
+                session.freeText = log.freeText || '';
                 completedSessions.push(session);
                 delete activeSessions[bid];
             } else {
-                completedSessions.push({ startDate: time, endDate: time, bid: bid, outcome: log.outcome, notes: log.notes, scanCount: 0 });
+                completedSessions.push({ startDate: time, endDate: time, bid: bid, outcome: log.outcome, notes: log.notes, freeText: log.freeText || '', scanCount: 0 });
             }
         }
     });
@@ -181,7 +182,7 @@ const AdminPanel: React.FC = () => {
         if (outcomeHeb.includes('ambulance')) outcomeHeb = 'פינוי רפואי';
         if (outcomeHeb.includes('family')) outcomeHeb = 'הגעת בן משפחה';
         if (outcomeHeb.includes('refused')) outcomeHeb = 'סירוב לקבלת עזרה';
-        const notes = clean(session.notes);
+        const notes = [clean(session.notes), clean(session.freeText)].filter(Boolean).join(' | ');
         const count = session.scanCount || 1;
         csvContent += `${dateStr},${startTimeStr},${endTimeStr},${durationStr},${session.bid},${count},${outcomeHeb},${notes}\n`;
     });
