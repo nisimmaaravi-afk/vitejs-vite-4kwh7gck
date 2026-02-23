@@ -84,8 +84,8 @@ export default function Emergency({ tagId }: { tagId: string }) {
     }
 
     try {
-      // 2. חיפוש דינמי ב-Firebase מול הרשויות שהקמת באדמין
-      const orgsRef = collection(db, 'organizations');
+      // 2. חיפוש דינמי ב-Firebase מול הרשויות שהקמת באדמין (תוקן ל-authorities)
+      const orgsRef = collection(db, 'authorities');
       const q = query(orgsRef, where('code', '==', medicalCode));
       const querySnapshot = await getDocs(q);
 
@@ -98,7 +98,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
         // 3. Fallback לבדיקה - אם לא הוקם ב-DB, נבדוק את הקודים הסטטיים שביקשת
         if (medicalCode === '1000') {
           setMedicalUnlocked(true);
-          setHandlerOrg('משטרה (בדיקה)');
+          setHandlerOrg('משטרת ישראל (בדיקה)');
         } else if (medicalCode === '1001') {
           setMedicalUnlocked(true);
           setHandlerOrg('מד"א (בדיקה)');
@@ -119,20 +119,25 @@ export default function Emergency({ tagId }: { tagId: string }) {
     if (isSubmitting) return;
     setIsSubmitting(true);
     setSubmitError(false);
+    
     try {
       if (!tagId) throw new Error('Missing critical data');
 
-      const dbAction = eventType === 'test' ? 'SYSTEM_TEST' : 'EVENT_RESOLVED';
       const dbOutcome = eventType === 'test' ? 'test_successful' : reportData.outcome;
 
+      // התיקון הקריטי: שולחים תמיד EVENT_RESOLVED כדי שהאקסל יסגור את האירוע, 
+      // שומרים את eventType כדי לדעת אם זה אירוע אמת או בדיקה, 
+      // ומוסיפים את authority כדי ששם הרשות יופיע בעמודה באקסל.
       await addDoc(collection(db, 'system_logs'), {
-        action: dbAction,
+        action: 'EVENT_RESOLVED', 
+        eventType: eventType, 
         details: tagId,
         outcome: dbOutcome,
         notes: reportData.notes || '',
         freeText: eventType === 'test' ? 'בדיקת תקינות יזומה' : (reportData.freeText?.trim() || ''),
         timestamp: serverTimestamp(),
-        user: handlerOrg, // <--- כאן נשתל השם של הרשות!
+        user: handlerOrg,
+        authority: handlerOrg, // <--- זה הנתון שהאקסל שלנו מחפש
         appVersion: '2.0.0-PRO',
       });
       setReportSubmitted(true);

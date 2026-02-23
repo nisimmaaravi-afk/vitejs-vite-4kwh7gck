@@ -9,12 +9,12 @@ import { Users, Activity, Download, Building2, Trash2, Plus, Edit2, Shield, User
 interface Patient {
   id: string;
   fullName: string;
-  idNumber: string; // חדש: תעודת זהות
+  idNumber: string;
   braceletId: string;
   district: string;
-  city: string; // חדש: עיר
+  city: string;
   personalPhone: string;
-  emergencyContact: string; // חדש: איש קשר לחירום
+  emergencyContact: string;
   medicalHistory: string;
 }
 
@@ -37,7 +37,6 @@ const AdminPanel: React.FC = () => {
   const [stats, setStats] = useState({ totalUsers: 0, scans24h: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Modals States - מעודכן עם השדות החדשים
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [editForm, setEditForm] = useState({ fullName: '', idNumber: '', braceletId: '', district: 'מרכז', city: '', phone: '', emergencyContact: '', history: '' });
   
@@ -72,12 +71,12 @@ const AdminPanel: React.FC = () => {
         return { 
           id: d.id, ...data,
           fullName: data.fullName || `${data.firstName || ''} ${data.lastName || ''}`,
-          idNumber: data.idNumber || '', // חילוץ תעודת זהות
+          idNumber: data.idNumber || '',
           braceletId: data.tagId || d.id,
           district: data.district || 'מרכז',
-          city: data.city || '', // חילוץ עיר
+          city: data.city || '',
           personalPhone: data.patientPhone || data.phone || '',
-          emergencyContact: data.emergencyContact || data.emergencyPhone || '', // חילוץ איש קשר
+          emergencyContact: data.emergencyContact || data.emergencyPhone || '',
           medicalHistory: data.notes || data.medicalHistory || ''
         } as Patient;
       });
@@ -108,7 +107,6 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // --- Authorities Handlers ---
   const handleAddAuthority = async () => {
     if (!newAuth.name || !newAuth.code) return alert('נא למלא שם וקוד');
     try {
@@ -128,7 +126,6 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // --- Patients Handlers ---
   const handleAddPatient = async () => {
     if (!newPatientForm.fullName || !newPatientForm.braceletId || !newPatientForm.idNumber) {
         return alert('חובה להזין שם מלא, תעודת זהות ומספר צמיד');
@@ -136,12 +133,12 @@ const AdminPanel: React.FC = () => {
     try {
       await setDoc(doc(db, 'users', newPatientForm.braceletId), {
         fullName: newPatientForm.fullName,
-        idNumber: newPatientForm.idNumber, // שמירת תעודת זהות
+        idNumber: newPatientForm.idNumber,
         tagId: newPatientForm.braceletId,
         district: newPatientForm.district,
-        city: newPatientForm.city, // שמירת עיר
+        city: newPatientForm.city,
         patientPhone: newPatientForm.phone,
-        emergencyContact: newPatientForm.emergencyContact, // שמירת איש קשר
+        emergencyContact: newPatientForm.emergencyContact,
         notes: newPatientForm.history,
         createdAt: new Date()
       });
@@ -158,12 +155,12 @@ const AdminPanel: React.FC = () => {
     try {
       await updateDoc(doc(db, 'users', editingPatient.id), { 
         fullName: editForm.fullName, 
-        idNumber: editForm.idNumber, // עדכון תעודת זהות
+        idNumber: editForm.idNumber,
         tagId: editForm.braceletId, 
         district: editForm.district, 
-        city: editForm.city, // עדכון עיר
+        city: editForm.city,
         patientPhone: editForm.phone, 
-        emergencyContact: editForm.emergencyContact, // עדכון איש קשר
+        emergencyContact: editForm.emergencyContact,
         notes: editForm.history 
       });
       setEditingPatient(null);
@@ -181,24 +178,109 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // --- Export & Map Logic ---
+  // --- ייצוא מתקדם לאקסל - זמנים וזיהוי רשויות ---
   const exportToCSV = () => {
-    let csvContent = "תאריך,שעה,פעולה,מספר צמיד,תוצאה,הערות\n";
-    logs.forEach(log => {
-      const dateObj = log.timestamp?.toDate ? log.timestamp.toDate() : new Date();
-      const dateStr = dateObj.toLocaleDateString('he-IL');
-      const timeStr = dateObj.toLocaleTimeString('he-IL');
-      const action = log.action === 'SCAN' ? 'סריקה' : log.action === 'EVENT_RESOLVED' ? 'סיום אירוע' : log.action;
-      const outcome = log.outcome || '---';
-      const notes = (log.notes || '').replace(/,/g, ' ').replace(/\n/g, ' '); 
-      csvContent += `${dateStr},${timeStr},${action},${log.details},${outcome},${notes}\n`;
+    let csvContent = "\uFEFF"; 
+    csvContent += "תאריך,שעת התחלה,שעת סיום,משך האירוע,מספר צמיד,מספר סריקות,תוצאת האירוע,גוף מטפל,הערות\n";
+
+    const sortedLogs = [...logs].sort((a, b) => {
+      const timeA = a.timestamp?.toDate()?.getTime() || 0;
+      const timeB = b.timestamp?.toDate()?.getTime() || 0;
+      return timeA - timeB;
     });
 
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const incidents: any[] = [];
+    const openIncidents: Record<string, any> = {};
+
+    const translateOutcome = (val: string) => {
+      const outcomes: Record<string, string> = {
+        'calmed_down': 'הרגעה במקום',
+        'family_arrived': 'הגעת בן משפחה',
+        'ambulance': 'פינוי באמבולנס',
+        'police': 'גורמי ביטחון',
+        'refused_help': 'סירב לקבל עזרה'
+      };
+      return outcomes[val] || val || 'טרם נסגר';
+    };
+
+    const getAuthorityName = (codeOrName: string) => {
+      if (!codeOrName) return 'סורק אנונימי';
+      const auth = authorities.find(a => a.code === codeOrName || a.name === codeOrName);
+      return auth ? auth.name : codeOrName;
+    };
+
+    const calculateDuration = (start: Date, end: Date | null) => {
+      if (!end) return 'טרם נסגר';
+      const diffMs = end.getTime() - start.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      if (diffMins < 1) return 'פחות מדקה';
+      if (diffMins < 60) return `${diffMins} דקות`;
+      const hours = Math.floor(diffMins / 60);
+      const mins = diffMins % 60;
+      return `${hours} שעות ו-${mins} דקות`;
+    };
+
+    sortedLogs.forEach(log => {
+      const tagId = log.details;
+      const logTime = log.timestamp?.toDate() ? log.timestamp.toDate() : new Date();
+
+      if (log.action === 'SCAN') {
+        if (!openIncidents[tagId]) {
+          openIncidents[tagId] = {
+            date: logTime,
+            initialScanTime: logTime,
+            resolvedTime: null,
+            tagId: tagId,
+            scanCount: 1,
+            outcome: '---', 
+            notes: '',
+            authority: log.authority || ''
+          };
+        } else {
+          openIncidents[tagId].scanCount += 1;
+        }
+      } else if (log.action === 'EVENT_RESOLVED') {
+        if (openIncidents[tagId]) {
+          openIncidents[tagId].resolvedTime = logTime;
+          openIncidents[tagId].outcome = translateOutcome(log.outcome);
+          openIncidents[tagId].notes = (log.notes || '').replace(/,/g, ' ').replace(/\n/g, ' - ');
+          if (log.authority) openIncidents[tagId].authority = log.authority;
+          
+          incidents.push(openIncidents[tagId]);
+          delete openIncidents[tagId]; 
+        } else {
+          incidents.push({
+            date: logTime,
+            initialScanTime: logTime,
+            resolvedTime: logTime,
+            tagId: tagId,
+            scanCount: 1,
+            outcome: translateOutcome(log.outcome),
+            notes: (log.notes || '').replace(/,/g, ' ').replace(/\n/g, ' - '),
+            authority: log.authority || ''
+          });
+        }
+      }
+    });
+
+    Object.values(openIncidents).forEach(inc => incidents.push(inc));
+    incidents.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    incidents.forEach(inc => {
+      const dateStr = inc.date.toLocaleDateString('he-IL');
+      const startTimeStr = inc.initialScanTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+      const endTimeStr = inc.resolvedTime ? inc.resolvedTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '---';
+      const duration = calculateDuration(inc.initialScanTime, inc.resolvedTime);
+      const authName = getAuthorityName(inc.authority);
+      
+      csvContent += `${dateStr},${startTimeStr},${endTimeStr},${duration},${inc.tagId},${inc.scanCount},${inc.outcome},${authName},${inc.notes}\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `recognition_live_report_${new Date().toLocaleDateString('he-IL').replace(/\./g, '-')}.csv`);
+    link.setAttribute("download", `Recognition_Live_Report_${new Date().toLocaleDateString('he-IL').replace(/\./g, '-')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -251,7 +333,7 @@ const AdminPanel: React.FC = () => {
         (p.fullName && p.fullName.toLowerCase().includes(term)) ||
         (p.braceletId && p.braceletId.includes(term)) ||
         (p.personalPhone && p.personalPhone.includes(term)) ||
-        (p.idNumber && p.idNumber.includes(term)) // חיפוש גם לפי תעודת זהות
+        (p.idNumber && p.idNumber.includes(term))
     );
   });
 
@@ -284,7 +366,7 @@ const AdminPanel: React.FC = () => {
     btnPrimary: { width: '100%', padding: '14px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
     btnSecondary: { width: '100%', padding: '14px', backgroundColor: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
     btnSuccess: { padding: '10px 16px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' },
-    rowInputs: { display: 'flex', gap: '10px', marginBottom: '15px' } // סגנון חדש לשדות בשורה אחת
+    rowInputs: { display: 'flex', gap: '10px', marginBottom: '15px' } 
   };
 
   return (
@@ -380,7 +462,7 @@ const AdminPanel: React.FC = () => {
                      <UserPlus size={18}/> הוסף מבוטח
                   </button>
               </div>
-              <input type="text" placeholder="חיפוש חופשי (ת.ז, שם, טלפון)..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ ...styles.input, width: '250px' }} />
+              <input type="text" placeholder="חיפוש (ת.ז, שם, טלפון)..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ ...styles.input, width: '250px' }} />
           </div>
           
           <div style={styles.tableWrapper}>
@@ -406,7 +488,7 @@ const AdminPanel: React.FC = () => {
                               <td style={{ ...styles.td, fontWeight: 900 }}>{p.fullName}</td>
                               <td style={styles.td}>{p.idNumber}</td>
                               <td style={styles.td}>{p.personalPhone}</td>
-                              <td style={{ ...styles.td, color: '#dc2626' }}>{p.emergencyContact}</td>
+                              <td style={{ ...styles.td, color: '#dc2626', fontWeight: 'bold' }}>{p.emergencyContact}</td>
                           </tr>
                       ))}
                   </tbody>
@@ -462,7 +544,7 @@ const AdminPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* ADD PATIENT MODAL - מעודכן עם השדות החדשים */}
+      {/* ADD PATIENT MODAL */}
       {showAddPatient && (
         <div style={styles.overlay}>
             <div style={{ ...styles.modal, maxWidth: '500px' }}>
@@ -523,7 +605,7 @@ const AdminPanel: React.FC = () => {
         </div>
       )}
 
-      {/* EDIT PATIENT MODAL - מעודכן עם השדות החדשים */}
+      {/* EDIT PATIENT MODAL */}
       {editingPatient && (
         <div style={styles.overlay}>
             <div style={{ ...styles.modal, maxWidth: '500px' }}>
