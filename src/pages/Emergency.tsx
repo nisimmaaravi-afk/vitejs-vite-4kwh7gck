@@ -3,7 +3,7 @@ import { doc, getDoc, addDoc, collection, serverTimestamp, query, where, getDocs
 import { db } from '../services/firebase';
 import {
   Phone, Heart, VolumeX, Hand, PersonStanding,
-  Moon, AlertTriangle, X, CheckCircle, Shield
+  Moon, AlertTriangle, X, CheckCircle, Shield, Info, HeadphonesIcon
 } from 'lucide-react';
 
 interface PatientData {
@@ -15,6 +15,7 @@ interface PatientData {
   city?: string;
   photoURL?: string;
   notes?: string;
+  status?: string;
 }
 
 export default function Emergency({ tagId }: { tagId: string }) {
@@ -27,12 +28,12 @@ export default function Emergency({ tagId }: { tagId: string }) {
   const [medicalCode, setMedicalCode] = useState('');
   const [medicalUnlocked, setMedicalUnlocked] = useState(false);
   const [codeError, setCodeError] = useState(false);
-  const [isCheckingCode, setIsCheckingCode] = useState(false); // סטייט לטעינה בזמן בדיקת קוד
+  const [isCheckingCode, setIsCheckingCode] = useState(false);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(false);
+  const [notFound, setNotFound] = useState(false);
   
-  // הסטייט הקריטי ששומר מי הגוף שטיפל באירוע
   const [handlerOrg, setHandlerOrg] = useState<string>('אזרח / לא ידוע');
 
   const MASTER_CODE = '65942229';
@@ -51,10 +52,11 @@ export default function Emergency({ tagId }: { tagId: string }) {
           setPatient(docSnap.data() as PatientData);
           window.history.replaceState(null, '', '/active-emergency-session');
         } else {
-          console.error("Patient not found");
+          setNotFound(true);
         }
       } catch (error) {
         console.error("Error fetching patient data", error);
+        setNotFound(true);
       }
     };
     fetchPatient();
@@ -69,13 +71,11 @@ export default function Emergency({ tagId }: { tagId: string }) {
     }
   }, [reportSubmitted]);
 
-  // פונקציה חכמה לאימות הקוד מול Firebase רק בזמן לחיצה
   const verifyMedicalCode = async () => {
     if (!medicalCode) return;
     setIsCheckingCode(true);
     setCodeError(false);
 
-    // 1. קודם בודקים אם זה המאסטר שלנו
     if (medicalCode === MASTER_CODE) {
       setMedicalUnlocked(true);
       setHandlerOrg('Master Admin');
@@ -84,18 +84,15 @@ export default function Emergency({ tagId }: { tagId: string }) {
     }
 
     try {
-      // 2. חיפוש דינמי ב-Firebase מול הרשויות שהקמת באדמין (תוקן ל-authorities)
       const orgsRef = collection(db, 'authorities');
       const q = query(orgsRef, where('code', '==', medicalCode));
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        // מצאנו התאמה ברשויות!
         const orgData = querySnapshot.docs[0].data();
         setMedicalUnlocked(true);
-        setHandlerOrg(orgData.name); // שומר את שם הגוף המטפל
+        setHandlerOrg(orgData.name);
       } else {
-        // 3. Fallback לבדיקה - אם לא הוקם ב-DB, נבדוק את הקודים הסטטיים שביקשת
         if (medicalCode === '1000') {
           setMedicalUnlocked(true);
           setHandlerOrg('משטרת ישראל (בדיקה)');
@@ -103,7 +100,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
           setMedicalUnlocked(true);
           setHandlerOrg('מד"א (בדיקה)');
         } else {
-          // שום דבר לא תאם
           setCodeError(true);
         }
       }
@@ -125,9 +121,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
 
       const dbOutcome = eventType === 'test' ? 'test_successful' : reportData.outcome;
 
-      // התיקון הקריטי: שולחים תמיד EVENT_RESOLVED כדי שהאקסל יסגור את האירוע, 
-      // שומרים את eventType כדי לדעת אם זה אירוע אמת או בדיקה, 
-      // ומוסיפים את authority כדי ששם הרשות יופיע בעמודה באקסל.
       await addDoc(collection(db, 'system_logs'), {
         action: 'EVENT_RESOLVED', 
         eventType: eventType, 
@@ -137,7 +130,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
         freeText: eventType === 'test' ? 'בדיקת תקינות יזומה' : (reportData.freeText?.trim() || ''),
         timestamp: serverTimestamp(),
         user: handlerOrg,
-        authority: handlerOrg, // <--- זה הנתון שהאקסל שלנו מחפש
+        authority: handlerOrg, 
         appVersion: '2.0.0-PRO',
       });
       setReportSubmitted(true);
@@ -148,14 +141,80 @@ export default function Emergency({ tagId }: { tagId: string }) {
     }
   };
 
-  if (!patient) return (
-    <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', background: '#F0F4F8', color: '#0f172a', fontWeight: 700 }}>
-      טוען נתונים מאובטחים...
-    </div>
-  );
+  // --- מצבי טעינה או שגיאה חמורה ---
+  if (!patient && !notFound) {
+    return (
+      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', background: '#F0F4F8', color: '#0f172a', fontWeight: 700 }}>
+        טוען נתונים מאובטחים...
+      </div>
+    );
+  }
 
-  const firstName = getFirstName(patient.fullName || patient.firstName || '');
+  // --- מצב צמיד מוקפא או לא קיים ---
+  if (notFound || patient?.status === 'frozen') {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', width: '100vw',
+        backgroundColor: '#F0F4F8', fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", direction: 'rtl',
+        margin: 0, padding: '20px', boxSizing: 'border-box'
+      }}>
+        <div style={{
+          background: 'white', padding: '48px 40px', borderRadius: '24px', boxShadow: '0 20px 50px rgba(0,0,0,0.06)',
+          width: '100%', maxWidth: '420px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+             <div style={{ background: '#eff6ff', padding: '14px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Shield color="#2563eb" size={32} />
+             </div>
+          </div>
+          
+          <h1 style={{ fontSize: '32px', fontWeight: 900, color: '#0f172a', margin: '12px 0 8px', letterSpacing: '-0.5px' }}>
+            Recognition <span style={{ color: '#2563eb' }}>Live</span>
+          </h1>
+          <p style={{ color: '#64748b', fontSize: '16px', fontWeight: 600, margin: '0 0 32px' }}>
+            מערכת זיהוי וסיוע חברתי
+          </p>
 
+          <div style={{ 
+            background: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '16px', padding: '28px 20px', 
+            width: '100%', boxSizing: 'border-box', marginBottom: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px'
+          }}>
+            <div style={{ background: '#e2e8f0', padding: '12px', borderRadius: '50%', marginBottom: '8px' }}>
+              <Info color="#475569" size={28} />
+            </div>
+            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#334155', margin: 0 }}>
+              צמיד זיהוי לא פעיל
+            </h2>
+            <p style={{ fontSize: '15px', color: '#64748b', fontWeight: 600, margin: 0, lineHeight: '1.5' }}>
+              הצמיד שנסרק מוגדר כרגע כמוקפא או שאינו רשום במערכת. לא ניתן להציג מידע רפואי או פרטי קשר.
+            </p>
+          </div>
+
+          <button
+            onClick={() => window.location.href = 'mailto:support@recognition-live.com'} 
+            style={{
+              width: '100%', padding: '18px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '16px',
+              fontWeight: 800, fontSize: '16px', cursor: 'pointer', boxShadow: '0 8px 24px rgba(37,99,235,0.25)',
+              display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', transition: 'all 0.2s'
+            }}
+          >
+            <HeadphonesIcon size={20} /> צור קשר עם השירות
+          </button>
+
+          <div style={{ marginTop: '32px', width: '100%' }}>
+            <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, letterSpacing: '0.5px' }}>
+              © 2026 Recognition Live Systems <br/> כל הזכויות שמורות
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // שורת ההגנה שפותרת את כל השגיאות של TypeScript
+  if (!patient) return null;
+
+  // --- מצב אחרי דיווח ---
   if (reportSubmitted) {
     return (
       <div style={{
@@ -171,7 +230,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
           <p style={{ fontSize: '16px', color: '#64748b', marginBottom: '28px', lineHeight: 1.6 }}>
             {eventType === 'test' 
               ? `המערכת תקינה. הנתונים נשמרו בלוג המערכת תחת הגוף: ${handlerOrg}`
-              : <><strong style={{ color: '#0f172a' }}>{firstName}</strong> מודה לך מקרב לב על העזרה. האירוע נסגר בבטחה על ידי {handlerOrg}.</>}
+              : <><strong style={{ color: '#0f172a' }}>{getFirstName(patient.fullName || patient.firstName || '')}</strong> מודה לך מקרב לב על העזרה. האירוע נסגר בבטחה על ידי {handlerOrg}.</>}
           </p>
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '24px', marginBottom: '28px' }}>
             <p style={{ fontSize: '15px', fontWeight: 600, color: '#334155', fontStyle: 'italic', lineHeight: 1.6 }}>
@@ -188,6 +247,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
     );
   }
 
+  // --- מצב חירום פעיל ---
   return (
     <div style={{ minHeight: '100vh', background: '#F0F4F8', fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", color: '#0f172a', paddingBottom: '40px' }}>
       <header style={{
