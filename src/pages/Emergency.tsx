@@ -36,6 +36,9 @@ export default function Emergency({ tagId }: { tagId: string }) {
   
   const [handlerOrg, setHandlerOrg] = useState<string>('אזרח / לא ידוע');
 
+  // טיימר ליציאה ממסך מוקפא
+  const [countdown, setCountdown] = useState(10); 
+
   const MASTER_CODE = '65942229';
 
   const getFirstName = (name: string): string => {
@@ -62,6 +65,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
     fetchPatient();
   }, [tagId]);
 
+  // טיימר למסך הצלחה (אירוע טופל)
   useEffect(() => {
     if (reportSubmitted) {
       const timer = setTimeout(() => {
@@ -70,6 +74,19 @@ export default function Emergency({ tagId }: { tagId: string }) {
       return () => clearTimeout(timer);
     }
   }, [reportSubmitted]);
+
+  // ✅ טיימר חדש למסך מוקפא / לא קיים
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (notFound || patient?.status === 'frozen') {
+      if (countdown > 0) {
+        timer = setTimeout(() => setCountdown(prev => prev - 1), 1000);
+      } else {
+        window.location.replace('https://www.google.com');
+      }
+    }
+    return () => clearTimeout(timer);
+  }, [notFound, patient?.status, countdown]);
 
   const verifyMedicalCode = async () => {
     if (!medicalCode) return;
@@ -195,18 +212,24 @@ export default function Emergency({ tagId }: { tagId: string }) {
             style={{
               width: '100%', padding: '18px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '16px',
               fontWeight: 800, fontSize: '16px', cursor: 'pointer', boxShadow: '0 8px 24px rgba(37,99,235,0.25)',
-              display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', transition: 'all 0.2s'
+              display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', transition: 'all 0.2s', marginBottom: '16px'
             }}
           >
             <HeadphonesIcon size={20} /> צור קשר עם השירות
           </button>
 
-          <div style={{ marginTop: '32px', width: '100%' }}>
+          <div style={{ width: '100%', background: '#e2e8f0', height: '4px', borderRadius: '2px', overflow: 'hidden' }}>
+            <div style={{ background: '#94a3b8', height: '100%', animation: 'progress 10s linear forwards', transformOrigin: 'left' }} />
+          </div>
+          <p style={{ fontSize: '11px', color: '#94a3b8', marginTop: '12px', fontWeight: 'bold' }}>המסך ייסגר בעוד {countdown} שניות</p>
+
+          <div style={{ marginTop: '24px', width: '100%' }}>
             <p style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, letterSpacing: '0.5px' }}>
               © 2026 Recognition Live Systems <br/> כל הזכויות שמורות
             </p>
           </div>
         </div>
+        <style>{`@keyframes progress { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }`}</style>
       </div>
     );
   }
