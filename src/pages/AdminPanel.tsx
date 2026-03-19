@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../services/firebase';
-import { collection, getDocs, deleteDoc, doc, updateDoc, addDoc, setDoc, query, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, getDoc, deleteDoc, doc, updateDoc, addDoc, setDoc, query, orderBy, limit } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Users, Activity, Download, Building2, Trash2, Plus, Edit2, Shield, UserPlus, Pause, Play, Calendar, BarChart3, PieChart } from 'lucide-react';
+import { Users, Activity, Download, Building2, Trash2, Plus, Edit2, Shield, UserPlus, Pause, Play, Calendar, PieChart, FileText } from 'lucide-react';
 
 interface Patient {
   id: string;
@@ -17,6 +17,7 @@ interface Patient {
   emergencyContact: string;
   medicalHistory: string;
   status?: string;
+  legalConsent?: any;
 }
 
 interface Authority {
@@ -25,7 +26,6 @@ interface Authority {
   code: string;
 }
 
-// פונקציות עזר לחישוב זמנים מדויק
 const getLocalISODate = (date: Date) => {
   const offset = date.getTimezoneOffset();
   const localDate = new Date(date.getTime() - (offset * 60 * 1000));
@@ -43,6 +43,15 @@ const parseDateString = (dateStr: string, isEndOfDay: boolean) => {
   return d.getTime();
 };
 
+const formatDistrict = (val: string) => {
+  if (!val) return 'לא הוגדר';
+  const lower = val.toLowerCase();
+  if (lower === 'center') return 'מרכז';
+  if (lower === 'north') return 'צפון';
+  if (lower === 'south') return 'דרום';
+  return val;
+};
+
 const AdminPanel: React.FC = () => {
   const navigate = useNavigate();
   const isAdmin = sessionStorage.getItem('isAdmin');
@@ -57,9 +66,13 @@ const AdminPanel: React.FC = () => {
   const [stats, setStats] = useState({ totalUsers: 0, scans24h: 0 });
   const [searchTerm, setSearchTerm] = useState('');
 
-  // ---- State למערכת טעינה משולבת (Pagination) ----
   const [visiblePatientsCount, setVisiblePatientsCount] = useState(50);
   const [visibleFeedCount, setVisibleFeedCount] = useState(50);
+
+  const [termsText, setTermsText] = useState('');
+  const [showTermsEdit, setShowTermsEdit] = useState(false);
+  const [isSavingTerms, setIsSavingTerms] = useState(false);
+  const [consentModalData, setConsentModalData] = useState<Patient | null>(null);
 
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
@@ -97,7 +110,7 @@ const AdminPanel: React.FC = () => {
     if (!isAdmin) {
       navigate('/');
     } else {
-      fetchData(); // קריאה חד פעמית בעת טעינת הרכיב
+      fetchData(); 
     }
   }, [isAdmin, navigate]);
 
@@ -116,7 +129,8 @@ const AdminPanel: React.FC = () => {
           personalPhone: data.patientPhone || data.phone || '',
           emergencyContact: data.emergencyContact || data.emergencyPhone || '',
           medicalHistory: data.notes || data.medicalHistory || '',
-          status: data.status || 'active'
+          status: data.status || 'active',
+          legalConsent: data.legalConsent || null
         } as Patient; 
       });
       setPatients(patList);
@@ -141,9 +155,31 @@ const AdminPanel: React.FC = () => {
       }).length;
 
       setStats({ totalUsers: patList.length, scans24h: scansInLast24h });
+
+      const termsRef = doc(db, 'settings', 'legal');
+      const termsSnap = await getDoc(termsRef);
+      if (termsSnap.exists()) {
+        setTermsText(termsSnap.data().termsText || '');
+      } else {
+        setTermsText("1. כללי\nמערכת Recognition Live נועדה לשמש ככלי טכנולוגי מסייע לזיהוי וניהול מקרי מצוקה בלבד. המערכת אינה מחליפה טיפול רפואי, פסיכיאטרי או שירותי חירום מקצועיים של המדינה.\n\n2. הסרת אחריות מוחלטת\nהמפתחים, הבעלים, והגופים הקשורים למערכת אינם נושאים באחריות משפטית, פלילית או אזרחית לנזק ישיר או עקיף, פיזי, רכושי או נפשי, שייגרם כתוצאה משימוש בצמיד, אי-זמינות המערכת, תקלות רשת, פגמים בשרתים או זמני תגובה של כוחות ההצלה בשטח.\n\n3. פרטיות, מאגרי מידע ומעקב\nהנך מסכים/ה במפורש לכך שהמידע האישי והרפואי שיוזן במערכת יישמר בשרתי הפרויקט ויוצג באופן אוטומטי לכוחות הצלה, ביטחון או רשויות מורשות מיד עם סריקת הצמיד. אנו מתעדים ושומרים פרטים כגון כתובת IP, חותמת זמן מדויקת וסוג הדפדפן לצורכי אבטחה, בקרה משפטית ומניעת הונאות.\n\n4. הסכמה מדעת\nבעצם לחיצה על כפתור האישור, הנך מצהיר/ה כי קראת את התנאים, שהפרטים שנמסרו נכונים, וכי השימוש בצמיד ובמערכת נעשה מרצונך החופשי, באחריותך הבלעדית ובהבנה מלאה של מגבלות הטכנולוגיה.");
+      }
+
     } catch (error) {
       console.error("Error loading data:", error);
     }
+  };
+
+  const handleSaveTerms = async () => {
+    setIsSavingTerms(true);
+    try {
+      await setDoc(doc(db, 'settings', 'legal'), { termsText, updatedAt: new Date() }, { merge: true });
+      setShowTermsEdit(false);
+      alert('התקנון נשמר בהצלחה!');
+    } catch (error) {
+      console.error("Error saving terms:", error);
+      alert('שגיאה בשמירת התקנון.');
+    }
+    setIsSavingTerms(false);
   };
 
   const mapStats = useMemo(() => {
@@ -480,7 +516,6 @@ const AdminPanel: React.FC = () => {
                 </div>
               </div>
             </div>
-            {/* Stats Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
               <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '12px', border: '1px solid #f1f5f9' }}>
                 <p style={{ color: '#64748b', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}>סריקות</p>
@@ -495,7 +530,6 @@ const AdminPanel: React.FC = () => {
                 <h4 style={{ fontSize: '20px', fontWeight: 900, color: '#2563eb', margin: 0 }}>{mapStats.rate}%</h4>
               </div>
             </div>
-            {/* Charts Area */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ padding: '12px', background: 'white', borderRadius: '12px', border: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <p style={{ color: '#64748b', fontSize: '11px', fontWeight: 'bold', marginBottom: '12px' }}>גוף מטפל</p>
@@ -534,7 +568,6 @@ const AdminPanel: React.FC = () => {
             </div>
           </div>
 
-          {/* Map Mobile */}
           <div style={s.card}>
             <MapHeaderControls />
             <div style={{ height: '280px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
@@ -560,7 +593,6 @@ const AdminPanel: React.FC = () => {
             </div>
           </div>
 
-          {/* Patient Table Mobile */}
           <div style={s.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#1e293b', margin: 0 }}>מבוטחים ({filteredPatients.length})</h2>
@@ -576,14 +608,14 @@ const AdminPanel: React.FC = () => {
                     <th style={s.th}>פעולות</th>
                     <th style={s.th}>שם מלא</th>
                     <th style={s.th}>ת.ז</th>
-                    <th style={s.th}>טלפון</th>
+                    <th style={s.th}>איש קשר בחירום</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredPatients.slice(0, visiblePatientsCount).map(p => (
                     <tr key={p.id} style={{ backgroundColor: p.status === 'frozen' ? '#fafafa' : 'transparent', opacity: p.status === 'frozen' ? 0.8 : 1 }}>
                       <td style={s.td}>
-                        <button onClick={() => { setEditingPatient(p); setEditForm({ fullName: p.fullName, idNumber: p.idNumber, braceletId: p.braceletId, district: p.district, city: p.city, phone: p.personalPhone, emergencyContact: p.emergencyContact, history: p.medicalHistory }); }} style={{ ...s.actionBtn, background: '#f1f5f9', color: '#475569' }} title="ערוך"><Edit2 size={14} /></button>
+                        <button onClick={() => { setEditingPatient(p); setEditForm({ fullName: p.fullName, idNumber: p.idNumber, braceletId: p.braceletId, district: formatDistrict(p.district), city: p.city, phone: p.personalPhone, emergencyContact: p.emergencyContact, history: p.medicalHistory }); }} style={{ ...s.actionBtn, background: '#f1f5f9', color: '#475569' }} title="ערוך"><Edit2 size={14} /></button>
                         <button onClick={() => toggleFreezeStatus(p.id, p.status || 'active')} style={{ ...s.actionBtn, background: p.status === 'frozen' ? '#dcfce3' : '#fef08a', color: p.status === 'frozen' ? '#166534' : '#854d0e' }} title={p.status === 'frozen' ? 'הפעל מחדש' : 'הקפא צמיד'}>
                           {p.status === 'frozen' ? <Play size={14} /> : <Pause size={14} />}
                         </button>
@@ -594,7 +626,7 @@ const AdminPanel: React.FC = () => {
                         {p.status === 'frozen' && <span style={s.frozenBadge}>מוקפא</span>}
                       </td>
                       <td style={s.td}>{p.idNumber}</td>
-                      <td style={s.td}>{p.personalPhone}</td>
+                      <td style={{ ...s.td, color: p.status === 'frozen' ? '#94a3b8' : '#dc2626', fontWeight: 'bold' }}>{p.emergencyContact}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -606,12 +638,19 @@ const AdminPanel: React.FC = () => {
               )}
             </div>
           </div>
+
+          <div style={s.card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}><FileText size={16} color="#94a3b8" /> מסמכים משפטיים</h2>
+              <button onClick={() => setShowTermsEdit(true)} style={{ padding: '6px 10px', backgroundColor: '#f1f5f9', color: '#475569', borderRadius: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>ערוך תקנון</button>
+            </div>
+          </div>
+
         </div>
       ) : (
         /* ===== DESKTOP ===== */
         <div style={{ display: 'flex', width: '100%', alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 0, padding: '24px 24px 24px 16px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            {/* Top Cards Desktop */}
             <div style={{ display: 'flex', gap: '16px' }}>
               <div style={{ ...s.card, flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
@@ -634,7 +673,6 @@ const AdminPanel: React.FC = () => {
               </div>
             </div>
 
-            {/* Stats View Desktop */}
             <div style={{ ...s.card, background: 'linear-gradient(to bottom left, #ffffff, #f8fafc)', border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
                 <div>
@@ -671,7 +709,6 @@ const AdminPanel: React.FC = () => {
                   <p style={{ color: '#64748b', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>יחס טיפול</p>
                   <h4 style={{ fontSize: '24px', fontWeight: 900, color: '#2563eb', margin: 0 }}>{mapStats.rate}%</h4>
                 </div>
-                {/* Authority Pie Chart (Desktop) */}
                 <div style={{ padding: '12px', background: 'white', borderRadius: '12px', border: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <p style={{ color: '#64748b', fontSize: '11px', fontWeight: 'bold', marginBottom: '12px' }}>גוף מטפל</p>
                   {mapStats.authorities.length === 0 ? (
@@ -688,7 +725,6 @@ const AdminPanel: React.FC = () => {
                     ))}
                   </div>
                 </div>
-                {/* Outcomes Bar (Desktop) */}
                 <div style={{ padding: '12px', background: 'white', borderRadius: '12px', border: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column' }}>
                   <p style={{ color: '#64748b', fontSize: '11px', fontWeight: 'bold', marginBottom: '12px', textAlign: 'center' }}>תוצאת סיום</p>
                   <div style={{ display: 'flex', gap: '2px', height: '12px', borderRadius: '6px', overflow: 'hidden', marginBottom: '12px' }}>
@@ -710,7 +746,6 @@ const AdminPanel: React.FC = () => {
               </div>
             </div>
 
-            {/* Map (Desktop) */}
             <div style={s.card}>
               <MapHeaderControls />
               <div style={{ height: '400px', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
@@ -742,7 +777,6 @@ const AdminPanel: React.FC = () => {
               </div>
             </div>
 
-            {/* Patient Table (Desktop) */}
             <div style={{ ...s.card, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '500px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -762,20 +796,20 @@ const AdminPanel: React.FC = () => {
                       <th style={s.th}>שם מלא</th>
                       <th style={s.th}>תעודת זהות</th>
                       <th style={s.th}>טלפון אישי</th>
-                      <th style={s.th}>איש קשר</th>
+                      <th style={s.th}>איש קשר בחירום</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredPatients.slice(0, visiblePatientsCount).map(p => (
                       <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: p.status === 'frozen' ? '#fafafa' : 'transparent', opacity: p.status === 'frozen' ? 0.8 : 1 }}>
                         <td style={s.td}>
-                          <button onClick={() => { setEditingPatient(p); setEditForm({ fullName: p.fullName, idNumber: p.idNumber, braceletId: p.braceletId, district: p.district, city: p.city, phone: p.personalPhone, emergencyContact: p.emergencyContact, history: p.medicalHistory }); }} style={{ ...s.actionBtn, background: '#f1f5f9', color: '#475569' }} title="ערוך"><Edit2 size={16} /></button>
+                          <button onClick={() => { setEditingPatient(p); setEditForm({ fullName: p.fullName, idNumber: p.idNumber, braceletId: p.braceletId, district: formatDistrict(p.district), city: p.city, phone: p.personalPhone, emergencyContact: p.emergencyContact, history: p.medicalHistory }); }} style={{ ...s.actionBtn, background: '#f1f5f9', color: '#475569' }} title="ערוך"><Edit2 size={16} /></button>
                           <button onClick={() => toggleFreezeStatus(p.id, p.status || 'active')} style={{ ...s.actionBtn, background: p.status === 'frozen' ? '#dcfce3' : '#fef08a', color: p.status === 'frozen' ? '#166534' : '#854d0e' }} title={p.status === 'frozen' ? 'הפעל מחדש' : 'הקפא צמיד'}>
                             {p.status === 'frozen' ? <Play size={16} /> : <Pause size={16} />}
                           </button>
                           {accessLevel === 'master' && <button onClick={() => handleDeletePatient(p.id)} style={{ ...s.actionBtn, background: '#fee2e2', color: '#ef4444' }} title="מחק"><Trash2 size={16} /></button>}
                         </td>
-                        <td style={s.td}><span style={s.badge}>{p.district}</span></td>
+                        <td style={s.td}><span style={s.badge}>{formatDistrict(p.district)}</span></td>
                         <td style={{ ...s.td, fontWeight: 900, color: p.status === 'frozen' ? '#94a3b8' : '#334155' }}>
                           {p.fullName}
                           {p.status === 'frozen' && <span style={s.frozenBadge}>מוקפא</span>}
@@ -796,7 +830,6 @@ const AdminPanel: React.FC = () => {
             </div>
           </div>
 
-          {/* Sidebar Left Desktop */}
           <div style={{ width: '280px', flexShrink: 0, padding: '24px 16px 24px 24px', position: 'sticky', top: 0, height: '100vh', boxSizing: 'border-box' }}>
             <div style={{ ...s.card, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#1e293b', margin: '0 0 20px 0' }}>📡 סריקות אחרונות</h2>
@@ -824,7 +857,6 @@ const AdminPanel: React.FC = () => {
                 )}
               </div>
 
-              {/* Authority Management Section (Desktop) */}
               <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                   <h2 style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}><Building2 size={16} color="#94a3b8" /> רשויות</h2>
@@ -854,6 +886,14 @@ const AdminPanel: React.FC = () => {
                   ))}
                 </div>
               </div>
+
+              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '20px', marginTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h2 style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}><FileText size={16} color="#94a3b8" /> מסמכים משפטיים</h2>
+                  <button onClick={() => setShowTermsEdit(true)} style={{ padding: '6px 10px', backgroundColor: '#f1f5f9', color: '#475569', borderRadius: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>ערוך תקנון</button>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -907,6 +947,16 @@ const AdminPanel: React.FC = () => {
                 <div style={{ flex: 1 }}><label style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#dc2626', marginBottom: '5px' }}>איש קשר לחירום</label><input type="text" value={editForm.emergencyContact} onChange={e => setEditForm({ ...editForm, emergencyContact: e.target.value })} style={{ ...s.input, borderColor: '#fca5a5', backgroundColor: '#fef2f2' }} /></div>
               </div>
               <div><label style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#64748b', marginBottom: '5px' }}>מידע רפואי</label><textarea value={editForm.history} onChange={e => setEditForm({ ...editForm, history: e.target.value })} rows={3} style={{ ...s.input, resize: 'none' }} /></div>
+              
+              <div style={{ marginTop: '5px', padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <button 
+                  onClick={(e) => { e.preventDefault(); setConsentModalData(editingPatient); }} 
+                  style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', width: '100%', justifyContent: 'center' }}
+                >
+                  📄 צפה באישורים משפטיים
+                </button>
+              </div>
+
             </div>
             <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
               <button onClick={() => setEditingPatient(null)} style={s.btnSecondary}>ביטול</button>
@@ -915,6 +965,47 @@ const AdminPanel: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* מודל הצגת נתוני הסכמה משפטית של המבוטח */}
+      {consentModalData && (
+        <div style={{...s.overlay, zIndex: 1100}}>
+          <div style={{...s.modal, maxWidth: '400px'}}>
+            <h3 style={{ fontSize: '20px', fontWeight: 900, textAlign: 'center', margin: '0 0 20px 0', color: '#0f172a' }}>אישורים משפטיים</h3>
+            {consentModalData.legalConsent ? (
+              <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#334155', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <p style={{ margin: '0 0 8px 0' }}><strong>סטטוס:</strong> <span style={{ color: '#10b981', fontWeight: 'bold' }}>✅ אושר</span></p>
+                <p style={{ margin: '0 0 8px 0' }}><strong>תאריך חתימה:</strong><br/>{consentModalData.legalConsent.timestamp?.toDate ? consentModalData.legalConsent.timestamp.toDate().toLocaleString('he-IL') : 'לא זמין'}</p>
+                <p style={{ margin: '0 0 8px 0' }}><strong>כתובת IP:</strong><br/>{consentModalData.legalConsent.ipAddress || 'לא זמין'}</p>
+                <p style={{ margin: 0, wordBreak: 'break-word' }}><strong>מכשיר/דפדפן:</strong><br/>{consentModalData.legalConsent.userAgent || 'לא זמין'}</p>
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', color: '#ef4444', fontWeight: 'bold', padding: '20px 0', background: '#fef2f2', borderRadius: '12px', border: '1px solid #fecaca' }}>
+                ⚠️ המבוטח טרם אישר את תנאי השימוש במערכת.
+              </div>
+            )}
+            <button onClick={() => setConsentModalData(null)} style={{...s.btnSecondary, marginTop: '20px'}}>סגור</button>
+          </div>
+        </div>
+      )}
+
+      {/* מודל עריכת תקנון משפטי */}
+      {showTermsEdit && (
+        <div style={s.overlay}>
+          <div style={{...s.modal, maxWidth: '700px'}}>
+            <h3 style={{ fontSize: '22px', fontWeight: 900, textAlign: 'center', margin: '0 0 20px 0', color: '#0f172a' }}>עריכת תנאי שימוש (מוצג למשתמשים ברישום)</h3>
+            <textarea 
+              value={termsText} 
+              onChange={(e) => setTermsText(e.target.value)} 
+              style={{...s.input, height: '350px', resize: 'vertical', fontFamily: 'system-ui', direction: 'rtl', lineHeight: '1.6'}} 
+            />
+            <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+              <button onClick={() => setShowTermsEdit(false)} style={s.btnSecondary}>ביטול</button>
+              <button onClick={handleSaveTerms} disabled={isSavingTerms} style={s.btnPrimary}>{isSavingTerms ? 'שומר...' : 'שמור תקנון'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

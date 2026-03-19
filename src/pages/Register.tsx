@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { doc, setDoc } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -15,6 +15,12 @@ export default function Register({ tagId }: RegisterProps) {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
+  // --- סטייטים עבור תנאי השימוש ואיסוף נתונים משפטיים ---
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [clientIP, setClientIP] = useState<string>('');
+  const [termsText, setTermsText] = useState<string>('טוען תנאי שימוש...');
+
   const [formData, setFormData] = useState({
     fullName: '', 
     idNumber: '', 
@@ -24,6 +30,33 @@ export default function Register({ tagId }: RegisterProps) {
     emergencyPhone: '', 
     notes: ''
   });
+
+  // משיכת כתובת ה-IP של המשתמש ותנאי השימוש מפאנל הניהול בעת טעינת המסך
+  useEffect(() => {
+    // משיכת IP
+    fetch('https://api.ipify.org?format=json')
+      .then(res => res.json())
+      .then(data => setClientIP(data.ip))
+      .catch(err => console.error('Failed to fetch IP', err));
+
+    // משיכת תקנון משפטי מ-Firestore
+    const fetchTerms = async () => {
+      try {
+        const termsRef = doc(db, 'settings', 'legal');
+        const termsSnap = await getDoc(termsRef);
+        if (termsSnap.exists() && termsSnap.data().termsText) {
+          setTermsText(termsSnap.data().termsText);
+        } else {
+          setTermsText('תנאי השימוש טרם הוזנו במערכת. אנא פנה למנהל המערכת.');
+        }
+      } catch (error) {
+        console.error('Error fetching terms:', error);
+        setTermsText('שגיאה בטעינת תנאי השימוש.');
+      }
+    };
+    
+    fetchTerms();
+  }, []);
 
   const validateInput = () => {
     let isValid = true;
@@ -42,6 +75,11 @@ export default function Register({ tagId }: RegisterProps) {
 
     if (!phoneRegex.test(formData.emergencyPhone)) {
       newErrors.emergency = 'מספר חירום לא תקין';
+      isValid = false;
+    }
+
+    if (!termsAccepted) {
+      alert('חובה לקרוא ולאשר את תנאי השימוש וההגנה המשפטית כדי להמשיך.');
       isValid = false;
     }
 
@@ -76,7 +114,7 @@ export default function Register({ tagId }: RegisterProps) {
         photoURL = await getDownloadURL(snapshot.ref);
       }
 
-      // שמירת הנתונים ב-Firestore עבור Recognition Live
+      // שמירת הנתונים ב-Firestore עבור Recognition Live עם התיעוד המשפטי
       await setDoc(doc(db, "users", tagId), {
         ...formData,
         tagId: tagId,
@@ -84,6 +122,12 @@ export default function Register({ tagId }: RegisterProps) {
         createdAt: new Date(),
         firstName: formData.fullName.split(' ')[0], 
         lastName: formData.fullName.split(' ').slice(1).join(' ') || '',
+        legalConsent: {
+          accepted: true,
+          timestamp: new Date(),
+          ipAddress: clientIP || 'Unknown IP',
+          userAgent: navigator.userAgent
+        }
       });
       
       // ריענון העמוד כדי לעבור למסך החירום המעודכן
@@ -163,8 +207,27 @@ export default function Register({ tagId }: RegisterProps) {
                 <textarea name="notes" placeholder="רגישויות, מחלות רקע..." onChange={handleChange} rows={3} style={{ ...inputStyle, height: 'auto' }} />
             </div>
 
+            {/* --- אזור תנאי השימוש --- */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '10px', border: termsAccepted ? '1px solid #10b981' : '1px solid #e2e8f0', transition: 'all 0.3s ease' }}>
+                <input 
+                  type="checkbox" 
+                  checked={termsAccepted} 
+                  onChange={() => {
+                    if (!termsAccepted) {
+                      setShowTermsModal(true); // פותח מודל במידה ועוד לא אושר
+                    } else {
+                      setTermsAccepted(false); // מאפשר הסרת סימון
+                    }
+                  }} 
+                  style={{ width: '22px', height: '22px', cursor: 'pointer', accentColor: '#2563eb', flexShrink: 0 }} 
+                />
+                <span style={{ fontSize: '13px', color: '#475569', cursor: 'pointer', lineHeight: '1.4' }} onClick={() => setShowTermsModal(true)}>
+                  קראתי ואני מאשר/ת את <strong style={{ color: '#2563eb', textDecoration: 'underline' }}>תנאי השימוש וההגנה המשפטית</strong>
+                </span>
+            </div>
+
             <button type="submit" disabled={loading} style={{ 
-                marginTop: '10px', padding: '15px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer'
+                marginTop: '10px', padding: '15px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', fontSize: '18px', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', opacity: termsAccepted ? 1 : 0.6
             }}>
                 {loading ? 'שומר נתונים...' : '✅ בצע רישום'}
             </button>
@@ -173,6 +236,42 @@ export default function Register({ tagId }: RegisterProps) {
             </form>
         </div>
       </div>
+
+      {/* --- מודל (פופ-אפ) תנאי שימוש --- */}
+      {showTermsModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.75)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '20px', backdropFilter: 'blur(4px)' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '450px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+            
+            <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#f8fafc', borderTopLeftRadius: '20px', borderTopRightRadius: '20px' }}>
+              <h3 style={{ margin: 0, color: '#0f172a', textAlign: 'center', fontSize: '18px', fontWeight: '900' }}>תנאי שימוש והסרת אחריות</h3>
+            </div>
+            
+            <div style={{ padding: '24px', overflowY: 'auto', fontSize: '14px', color: '#334155', lineHeight: '1.7', whiteSpace: 'pre-wrap' }}>
+              {termsText}
+            </div>
+            
+            <div style={{ padding: '20px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '12px', backgroundColor: '#f8fafc', borderBottomLeftRadius: '20px', borderBottomRightRadius: '20px' }}>
+              <button 
+                onClick={() => setShowTermsModal(false)} 
+                style={{ flex: 1, padding: '14px', backgroundColor: 'white', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '15px' }}
+              >
+                ביטול
+              </button>
+              <button 
+                onClick={() => {
+                  setTermsAccepted(true);
+                  setShowTermsModal(false);
+                }} 
+                style={{ flex: 2, padding: '14px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '15px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
+              >
+                קראתי ואני מסכים/ה
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
