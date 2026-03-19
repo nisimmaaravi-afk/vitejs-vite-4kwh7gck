@@ -57,12 +57,19 @@ const AdminPanel: React.FC = () => {
   const [stats, setStats] = useState({ totalUsers: 0, scans24h: 0 });
   const [searchTerm, setSearchTerm] = useState('');
 
+  // ---- State למערכת טעינה משולבת (Pagination) ----
+  const [visiblePatientsCount, setVisiblePatientsCount] = useState(50);
+  const [visibleFeedCount, setVisibleFeedCount] = useState(50);
+
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
     return getLocalISODate(d);
   });
   const [endDate, setEndDate] = useState(() => getLocalISODate(new Date()));
+
+  const [activeMapFilters, setActiveMapFilters] = useState({ open: true, resolved: true, inquiry: true });
+  const [mapViewMode, setMapViewMode] = useState<'pins' | 'heat'>('pins');
 
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [editForm, setEditForm] = useState({ fullName: '', idNumber: '', braceletId: '', district: 'מרכז', city: '', phone: '', emergencyContact: '', history: '' });
@@ -90,9 +97,7 @@ const AdminPanel: React.FC = () => {
     if (!isAdmin) {
       navigate('/');
     } else {
-      fetchData();
-      const interval = setInterval(fetchData, 10000);
-      return () => clearInterval(interval);
+      fetchData(); // קריאה חד פעמית בעת טעינת הרכיב
     }
   }, [isAdmin, navigate]);
 
@@ -141,7 +146,6 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  // חישוב סטטיסטיקות
   const mapStats = useMemo(() => {
     const startMs = parseDateString(startDate, false);
     const endMs = parseDateString(endDate, true);
@@ -326,9 +330,9 @@ const AdminPanel: React.FC = () => {
     const scanTime = scanLog.timestamp?.toDate ? scanLog.timestamp.toDate() : new Date();
     const diff = (new Date().getTime() - scanTime.getTime()) / 60000;
     const resolved = allLogs.find(l => l.action === 'EVENT_RESOLVED' && l.details === scanLog.details && l.timestamp?.toDate() > scanTime);
-    if (resolved) return { color: '#10b981', label: 'סגור' };
-    if (diff > 60) return { color: '#9ca3af', label: 'לבירור' };
-    return { color: '#ef4444', label: 'פתוח' };
+    if (resolved) return { color: '#10b981', label: 'סגור', key: 'resolved' };
+    if (diff > 60) return { color: '#9ca3af', label: 'לבירור', key: 'inquiry' };
+    return { color: '#ef4444', label: 'פתוח', key: 'open' };
   };
 
   const getMapMarkers = () => {
@@ -348,16 +352,25 @@ const AdminPanel: React.FC = () => {
           ? [scan.location.lat, scan.location.lng] 
           : getFallbackPosition(patient.district);
           
+        const statusData = getEventStatus(scan, logs);
+
         return { 
           id: scan.id, 
           fullName: patient.fullName, 
           braceletId: patient.braceletId, 
           pos, 
           isGps: !!scan.location, 
-          statusColor: getEventStatus(scan, logs).color 
+          statusColor: statusData.color,
+          statusKey: statusData.key
         };
       })
-      .filter(Boolean);
+      .filter((item: any) => {
+         if (!item) return false;
+         if (item.statusKey === 'open' && !activeMapFilters.open) return false;
+         if (item.statusKey === 'resolved' && !activeMapFilters.resolved) return false;
+         if (item.statusKey === 'inquiry' && !activeMapFilters.inquiry) return false;
+         return true;
+      });
   };
 
   const filteredPatients = patients.filter(p => {
@@ -365,6 +378,29 @@ const AdminPanel: React.FC = () => {
     if (t === 'מוקפא') return p.status === 'frozen';
     return (p.fullName?.toLowerCase().includes(t)) || (p.braceletId?.includes(t)) || (p.personalPhone?.includes(t)) || (p.idNumber?.includes(t));
   });
+
+  const MapHeaderControls = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '14px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <h2 style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 900, color: '#1e293b', margin: 0 }}>🗺️ מפת תקריות ארצית</h2>
+        <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '4px' }}>
+          <button onClick={() => setMapViewMode('pins')} style={{ padding: '4px 12px', border: 'none', borderRadius: '6px', background: mapViewMode === 'pins' ? 'white' : 'transparent', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer', boxShadow: mapViewMode === 'pins' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', color: '#334155' }}>נקודות דיוק</button>
+          <button onClick={() => setMapViewMode('heat')} style={{ padding: '4px 12px', border: 'none', borderRadius: '6px', background: mapViewMode === 'heat' ? 'white' : 'transparent', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer', boxShadow: mapViewMode === 'heat' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', color: '#334155' }}>ריכוז אזורי</button>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '15px', fontSize: '12px', fontWeight: 'bold', color: '#64748b' }}>
+        <span onClick={() => setActiveMapFilters(prev => ({...prev, open: !prev.open}))} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', opacity: activeMapFilters.open ? 1 : 0.4, transition: 'opacity 0.2s' }}>
+          <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#ef4444' }}></div> פתוח
+        </span>
+        <span onClick={() => setActiveMapFilters(prev => ({...prev, resolved: !prev.resolved}))} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', opacity: activeMapFilters.resolved ? 1 : 0.4, transition: 'opacity 0.2s' }}>
+          <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#10b981' }}></div> שטופל
+        </span>
+        <span onClick={() => setActiveMapFilters(prev => ({...prev, inquiry: !prev.inquiry}))} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', opacity: activeMapFilters.inquiry ? 1 : 0.4, transition: 'opacity 0.2s' }}>
+          <div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#9ca3af' }}></div> לבירור
+        </span>
+      </div>
+    </div>
+  );
 
   if (!isAdmin) return null;
 
@@ -382,7 +418,8 @@ const AdminPanel: React.FC = () => {
     btnSecondary: { width: '100%', padding: '14px', backgroundColor: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' },
     rowInputs: { display: 'flex', gap: '10px', marginBottom: '15px' },
     actionBtn: { border: 'none', padding: '6px', borderRadius: '6px', cursor: 'pointer', marginLeft: '4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
-    dateInput: { padding: '6px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', outline: 'none' } 
+    dateInput: { padding: '6px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', outline: 'none' },
+    loadMoreBtn: { width: '100%', padding: '10px', background: '#f8fafc', color: '#3b82f6', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px' }
   };
 
   return (
@@ -399,10 +436,9 @@ const AdminPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* BODY */}
+      {/* BODY - MOBILE */}
       {isMobile ? (
         <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div style={{ ...s.card, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -424,7 +460,6 @@ const AdminPanel: React.FC = () => {
             <Download size={20} /> הורד דוח מנהלים (CSV)
           </button>
 
-          {/* מסך סטטיסטיקות חדש + עוגה למובייל */}
           <div style={{ ...s.card, background: 'linear-gradient(to bottom left, #ffffff, #f8fafc)', border: '1px solid #e2e8f0' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
               <div>
@@ -432,7 +467,6 @@ const AdminPanel: React.FC = () => {
                   <PieChart color="#2563eb" size={20} /> ניתוח מרחבי
                 </h2>
               </div>
-
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: 'white', padding: '12px', borderRadius: '12px', border: '1px solid #f1f5f9' }}>
                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                   {[{l:'יום', d:1}, {l:'שבוע', d:7}, {l:'חודש', d:30}, {l:'שנה', d:365}].map(b => (
@@ -446,7 +480,7 @@ const AdminPanel: React.FC = () => {
                 </div>
               </div>
             </div>
-
+            {/* Stats Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
               <div style={{ textAlign: 'center', padding: '12px', background: 'white', borderRadius: '12px', border: '1px solid #f1f5f9' }}>
                 <p style={{ color: '#64748b', fontSize: '10px', fontWeight: 'bold', marginBottom: '4px' }}>סריקות</p>
@@ -461,8 +495,7 @@ const AdminPanel: React.FC = () => {
                 <h4 style={{ fontSize: '20px', fontWeight: 900, color: '#2563eb', margin: 0 }}>{mapStats.rate}%</h4>
               </div>
             </div>
-
-            {/* עוגה במובייל + מקרא */}
+            {/* Charts Area */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ padding: '12px', background: 'white', borderRadius: '12px', border: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <p style={{ color: '#64748b', fontSize: '11px', fontWeight: 'bold', marginBottom: '12px' }}>גוף מטפל</p>
@@ -480,8 +513,6 @@ const AdminPanel: React.FC = () => {
                   ))}
                 </div>
               </div>
-
-              {/* בר תוצאות במובייל + מקרא */}
               <div style={{ padding: '12px', background: 'white', borderRadius: '12px', border: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column' }}>
                 <p style={{ color: '#64748b', fontSize: '11px', fontWeight: 'bold', marginBottom: '12px', textAlign: 'center' }}>תוצאת סיום</p>
                 <div style={{ display: 'flex', gap: '2px', height: '12px', borderRadius: '6px', overflow: 'hidden', marginBottom: '12px' }}>
@@ -503,30 +534,33 @@ const AdminPanel: React.FC = () => {
             </div>
           </div>
 
-          {/* מפה */}
+          {/* Map Mobile */}
           <div style={s.card}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#1e293b', margin: 0 }}>🗺️ מפת תקריות ארצית</h2>
-              <div style={{ display: 'flex', gap: '10px', fontSize: '11px', fontWeight: 'bold', color: '#64748b' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#ef4444' }}></div> פתוח</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#10b981' }}></div> סגור</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#9ca3af' }}></div> לבירור</span>
-              </div>
-            </div>
-
+            <MapHeaderControls />
             <div style={{ height: '280px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
               <MapContainer center={[32.0853, 34.7818]} zoom={7} style={{ height: '100%', width: '100%' }}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
                 {getMapMarkers().map((item: any) => (
-                  <CircleMarker key={item.id} center={item.pos} pathOptions={{ color: item.statusColor, fillColor: item.statusColor, fillOpacity: 0.8 }} radius={item.isGps ? 8 : 5}>
-                    <Popup><strong>מספר צמיד:</strong><br />{item.braceletId}</Popup>
+                  <CircleMarker 
+                    key={item.id} 
+                    center={item.pos} 
+                    pathOptions={{ 
+                      color: mapViewMode === 'heat' ? 'transparent' : item.statusColor, 
+                      fillColor: item.statusColor, 
+                      fillOpacity: mapViewMode === 'heat' ? 0.3 : 0.8 
+                    }} 
+                    radius={mapViewMode === 'heat' ? 25 : (item.isGps ? 8 : 5)}
+                  >
+                    {mapViewMode === 'pins' && (
+                      <Popup><strong>מספר צמיד:</strong><br />{item.braceletId}</Popup>
+                    )}
                   </CircleMarker>
                 ))}
               </MapContainer>
             </div>
           </div>
 
-          {/* טבלת מבוטחים */}
+          {/* Patient Table Mobile */}
           <div style={s.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#1e293b', margin: 0 }}>מבוטחים ({filteredPatients.length})</h2>
@@ -546,7 +580,7 @@ const AdminPanel: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPatients.map(p => (
+                  {filteredPatients.slice(0, visiblePatientsCount).map(p => (
                     <tr key={p.id} style={{ backgroundColor: p.status === 'frozen' ? '#fafafa' : 'transparent', opacity: p.status === 'frozen' ? 0.8 : 1 }}>
                       <td style={s.td}>
                         <button onClick={() => { setEditingPatient(p); setEditForm({ fullName: p.fullName, idNumber: p.idNumber, braceletId: p.braceletId, district: p.district, city: p.city, phone: p.personalPhone, emergencyContact: p.emergencyContact, history: p.medicalHistory }); }} style={{ ...s.actionBtn, background: '#f1f5f9', color: '#475569' }} title="ערוך"><Edit2 size={14} /></button>
@@ -565,67 +599,19 @@ const AdminPanel: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+              {visiblePatientsCount < filteredPatients.length && (
+                <button onClick={() => setVisiblePatientsCount(prev => prev + 50)} style={s.loadMoreBtn}>
+                  טען עוד מבוטחים...
+                </button>
+              )}
             </div>
           </div>
-
-          <div style={s.card}>
-            <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#1e293b', margin: '0 0 16px 0' }}>📡 סריקות אחרונות</h2>
-            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-              {scanFeed.length === 0
-                ? <p style={{ textAlign: 'center', color: '#94a3b8' }}>אין סריקות לאחרונה</p>
-                : scanFeed.map(log => {
-                  const status = getEventStatus(log, logs);
-                  return (
-                    <div key={log.id} style={{ ...s.feedItem, borderRightColor: status.color }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ fontWeight: 'bold', fontSize: '13px', color: '#334155' }}>{log.action === 'SCAN' ? '✅ סריקה נכנסה' : '⚠️ שגיאה'}</span>
-                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: status.color }}></div>
-                      </div>
-                      <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 4px 0' }}>{log.timestamp?.toDate ? log.timestamp.toDate().toLocaleString('he-IL') : '---'}</p>
-                      <p style={{ fontWeight: 900, color: '#2563eb', margin: 0, fontSize: '13px' }}>צמיד: {log.details}</p>
-                    </div>
-                  );
-                })
-              }
-            </div>
-          </div>
-
-          {/* ניהול רשויות */}
-          <div style={s.card}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: 900, color: '#1e293b', margin: 0 }}>ניהול רשויות</h2>
-              <button onClick={() => setShowAddAuth(!showAddAuth)} style={{ padding: '8px 14px', backgroundColor: '#1e293b', color: 'white', borderRadius: '8px', border: 'none', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' }}>+ הוסף</button>
-            </div>
-            {showAddAuth && (
-              <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', marginBottom: '16px' }}>
-                <input type="text" placeholder="שם הרשות" value={newAuth.name} onChange={e => setNewAuth({ ...newAuth, name: e.target.value })} style={{ ...s.input, marginBottom: '10px' }} />
-                <input type="text" placeholder="קוד פתיחה" value={newAuth.code} onChange={e => setNewAuth({ ...newAuth, code: e.target.value })} style={{ ...s.input, marginBottom: '10px' }} />
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={() => setShowAddAuth(false)} style={s.btnSecondary}>ביטול</button>
-                  <button onClick={handleAddAuthority} style={s.btnPrimary}>שמור</button>
-                </div>
-              </div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {authorities.map(auth => (
-                <div key={auth.id} style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <p style={{ fontWeight: 900, fontSize: '16px', margin: '0 0 4px 0', color: '#1e293b' }}>{auth.name}</p>
-                    <span style={{ backgroundColor: '#dbeafe', color: '#2563eb', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>קוד: {auth.code}</span>
-                  </div>
-                  <button onClick={() => handleDeleteAuthority(auth.id)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><Trash2 size={18} /></button>
-                </div>
-              ))}
-            </div>
-          </div>
-
         </div>
       ) : (
-        /* ===== דסקטופ ===== */
+        /* ===== DESKTOP ===== */
         <div style={{ display: 'flex', width: '100%', alignItems: 'flex-start' }}>
-
           <div style={{ flex: 1, minWidth: 0, padding: '24px 24px 24px 16px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
+            {/* Top Cards Desktop */}
             <div style={{ display: 'flex', gap: '16px' }}>
               <div style={{ ...s.card, flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
@@ -648,7 +634,7 @@ const AdminPanel: React.FC = () => {
               </div>
             </div>
 
-            {/* ✅ מסך סטטיסטיקות חדש + עוגה ומקרא מפורט (דסקטופ) */}
+            {/* Stats View Desktop */}
             <div style={{ ...s.card, background: 'linear-gradient(to bottom left, #ffffff, #f8fafc)', border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
                 <div>
@@ -657,7 +643,6 @@ const AdminPanel: React.FC = () => {
                   </h2>
                   <p style={{ color: '#64748b', fontSize: '13px', margin: 0 }}>נתונים סטטיסטיים לפי טווח הזמנים הנבחר</p>
                 </div>
-
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', background: 'white', padding: '10px', borderRadius: '14px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', border: '1px solid #f1f5f9' }}>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     {[{l:'יום', d:1}, {l:'שבוע', d:7}, {l:'חודש', d:30}, {l:'שנה', d:365}].map(b => (
@@ -673,7 +658,6 @@ const AdminPanel: React.FC = () => {
                   </div>
                 </div>
               </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
                 <div style={{ textAlign: 'center', padding: '16px', background: 'white', borderRadius: '12px', border: '1px solid #f1f5f9' }}>
                   <p style={{ color: '#64748b', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>סך סריקות בטווח</p>
@@ -687,8 +671,7 @@ const AdminPanel: React.FC = () => {
                   <p style={{ color: '#64748b', fontSize: '12px', fontWeight: 'bold', marginBottom: '8px' }}>יחס טיפול</p>
                   <h4 style={{ fontSize: '24px', fontWeight: 900, color: '#2563eb', margin: 0 }}>{mapStats.rate}%</h4>
                 </div>
-
-                {/* עוגת הגופים המטפלים */}
+                {/* Authority Pie Chart (Desktop) */}
                 <div style={{ padding: '12px', background: 'white', borderRadius: '12px', border: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <p style={{ color: '#64748b', fontSize: '11px', fontWeight: 'bold', marginBottom: '12px' }}>גוף מטפל</p>
                   {mapStats.authorities.length === 0 ? (
@@ -696,7 +679,6 @@ const AdminPanel: React.FC = () => {
                   ) : (
                     <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: `conic-gradient(${mapStats.conicString})`, boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }} />
                   )}
-                  {/* מקרא מפורט לגופים מטפלים */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '12px', width: '100%', alignItems: 'flex-start' }}>
                     {mapStats.authorities.map((a, idx) => (
                       <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#334155', fontWeight: '500' }}>
@@ -706,8 +688,7 @@ const AdminPanel: React.FC = () => {
                     ))}
                   </div>
                 </div>
-
-                {/* הבר של התוצאות */}
+                {/* Outcomes Bar (Desktop) */}
                 <div style={{ padding: '12px', background: 'white', borderRadius: '12px', border: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column' }}>
                   <p style={{ color: '#64748b', fontSize: '11px', fontWeight: 'bold', marginBottom: '12px', textAlign: 'center' }}>תוצאת סיום</p>
                   <div style={{ display: 'flex', gap: '2px', height: '12px', borderRadius: '6px', overflow: 'hidden', marginBottom: '12px' }}>
@@ -717,7 +698,6 @@ const AdminPanel: React.FC = () => {
                       ))
                     }
                   </div>
-                  {/* מקרא מפורט לתוצאות סיום */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%', alignItems: 'flex-start' }}>
                     {mapStats.outcomes.map((o, idx) => (
                       <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#334155', fontWeight: '500' }}>
@@ -730,33 +710,39 @@ const AdminPanel: React.FC = () => {
               </div>
             </div>
 
-            {/* מפה */}
+            {/* Map (Desktop) */}
             <div style={s.card}>
-              <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '10px', margin: '0 0 16px 0' }}>🗺️ מפת תקריות ארצית</h2>
-              <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', fontSize: '13px', fontWeight: 'bold', color: '#64748b' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#ef4444' }}></div> אירוע פתוח</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#10b981' }}></div> סגור שטופל</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><div style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#9ca3af' }}></div> לבירור</span>
-              </div>
+              <MapHeaderControls />
               <div style={{ height: '400px', borderRadius: '16px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
                 <MapContainer center={[32.0853, 34.7818]} zoom={8} style={{ height: '100%', width: '100%' }}>
                   <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; OpenStreetMap' />
                   {getMapMarkers().map((item: any) => (
-                    <CircleMarker key={item.id} center={item.pos} pathOptions={{ color: item.statusColor, fillColor: item.statusColor, fillOpacity: 0.8 }} radius={item.isGps ? 8 : 5}>
-                      <Popup>
-                        <div style={{ direction: 'rtl', textAlign: 'right' }}>
-                          <span style={{ color: '#64748b', fontSize: '12px' }}>מספר צמיד:</span><br/>
-                          <strong>{item.braceletId}</strong><br />
-                          {item.isGps && <span style={{ color: '#059669', fontSize: '11px', fontWeight: 'bold' }}>📡 GPS מדויק</span>}
-                        </div>
-                      </Popup>
+                    <CircleMarker 
+                      key={item.id} 
+                      center={item.pos} 
+                      pathOptions={{ 
+                        color: mapViewMode === 'heat' ? 'transparent' : item.statusColor, 
+                        fillColor: item.statusColor, 
+                        fillOpacity: mapViewMode === 'heat' ? 0.3 : 0.8 
+                      }} 
+                      radius={mapViewMode === 'heat' ? 25 : (item.isGps ? 8 : 5)}
+                    >
+                      {mapViewMode === 'pins' && (
+                        <Popup>
+                          <div style={{ direction: 'rtl', textAlign: 'right' }}>
+                            <span style={{ color: '#64748b', fontSize: '12px' }}>מספר צמיד:</span><br/>
+                            <strong>{item.braceletId}</strong><br />
+                            {item.isGps && <span style={{ color: '#059669', fontSize: '11px', fontWeight: 'bold' }}>📡 GPS מדויק</span>}
+                          </div>
+                        </Popup>
+                      )}
                     </CircleMarker>
                   ))}
                 </MapContainer>
               </div>
             </div>
 
-            {/* טבלת מבוטחים */}
+            {/* Patient Table (Desktop) */}
             <div style={{ ...s.card, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '500px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -780,7 +766,7 @@ const AdminPanel: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredPatients.map(p => (
+                    {filteredPatients.slice(0, visiblePatientsCount).map(p => (
                       <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: p.status === 'frozen' ? '#fafafa' : 'transparent', opacity: p.status === 'frozen' ? 0.8 : 1 }}>
                         <td style={s.td}>
                           <button onClick={() => { setEditingPatient(p); setEditForm({ fullName: p.fullName, idNumber: p.idNumber, braceletId: p.braceletId, district: p.district, city: p.city, phone: p.personalPhone, emergencyContact: p.emergencyContact, history: p.medicalHistory }); }} style={{ ...s.actionBtn, background: '#f1f5f9', color: '#475569' }} title="ערוך"><Edit2 size={16} /></button>
@@ -801,19 +787,23 @@ const AdminPanel: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
+                {visiblePatientsCount < filteredPatients.length && (
+                  <button onClick={() => setVisiblePatientsCount(prev => prev + 50)} style={s.loadMoreBtn}>
+                    טען עוד מבוטחים...
+                  </button>
+                )}
               </div>
             </div>
-
           </div>
 
-          {/* עמודה שמאלית (דסקטופ) */}
+          {/* Sidebar Left Desktop */}
           <div style={{ width: '280px', flexShrink: 0, padding: '24px 16px 24px 24px', position: 'sticky', top: 0, height: '100vh', boxSizing: 'border-box' }}>
             <div style={{ ...s.card, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <h2 style={{ fontSize: '20px', fontWeight: 900, color: '#1e293b', margin: '0 0 20px 0' }}>📡 סריקות אחרונות</h2>
               <div style={{ overflowY: 'auto', flexGrow: 1, marginBottom: '20px' }}>
                 {scanFeed.length === 0
                   ? <p style={{ textAlign: 'center', color: '#94a3b8', marginTop: '40px' }}>אין סריקות לאחרונה</p>
-                  : scanFeed.map(log => {
+                  : scanFeed.slice(0, visibleFeedCount).map(log => {
                     const status = getEventStatus(log, logs);
                     return (
                       <div key={log.id} style={{ ...s.feedItem, borderRightColor: status.color }}>
@@ -827,9 +817,14 @@ const AdminPanel: React.FC = () => {
                     );
                   })
                 }
+                {visibleFeedCount < scanFeed.length && (
+                  <button onClick={() => setVisibleFeedCount(prev => prev + 50)} style={s.loadMoreBtn}>
+                    טען עוד...
+                  </button>
+                )}
               </div>
 
-              {/* ניהול רשויות */}
+              {/* Authority Management Section (Desktop) */}
               <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                   <h2 style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}><Building2 size={16} color="#94a3b8" /> רשויות</h2>
@@ -861,11 +856,10 @@ const AdminPanel: React.FC = () => {
               </div>
             </div>
           </div>
-
         </div>
       )}
 
-      {/* MODAL: הוספת מבוטח */}
+      {/* MODALS */}
       {showAddPatient && (
         <div style={s.overlay}>
           <div style={s.modal}>
@@ -894,7 +888,6 @@ const AdminPanel: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL: עריכת מבוטח */}
       {editingPatient && (
         <div style={s.overlay}>
           <div style={s.modal}>
@@ -922,7 +915,6 @@ const AdminPanel: React.FC = () => {
           </div>
         </div>
       )}
-
     </div>
   );
 };
