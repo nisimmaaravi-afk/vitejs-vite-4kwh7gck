@@ -16,10 +16,12 @@ export default function Register({ tagId }: RegisterProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // --- סטייטים עבור תנאי השימוש ואיסוף נתונים משפטיים ---
-  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showLegalModal, setShowLegalModal] = useState(false);
+  const [legalTab, setLegalTab] = useState<'terms' | 'privacy'>('terms');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [clientIP, setClientIP] = useState<string>('');
-  const [termsText, setTermsText] = useState<string>('טוען תנאי שימוש...');
+  
+  const [legalTexts, setLegalTexts] = useState({ terms: 'טוען...', privacy: 'טוען...' });
 
   const [formData, setFormData] = useState({
     fullName: '', 
@@ -31,7 +33,7 @@ export default function Register({ tagId }: RegisterProps) {
     notes: ''
   });
 
-  // משיכת כתובת ה-IP של המשתמש ותנאי השימוש מפאנל הניהול בעת טעינת המסך
+  // משיכת כתובת ה-IP והמסמכים המשפטיים בעת טעינת המסך
   useEffect(() => {
     // משיכת IP
     fetch('https://api.ipify.org?format=json')
@@ -39,23 +41,27 @@ export default function Register({ tagId }: RegisterProps) {
       .then(data => setClientIP(data.ip))
       .catch(err => console.error('Failed to fetch IP', err));
 
-    // משיכת תקנון משפטי מ-Firestore
-    const fetchTerms = async () => {
+    // משיכת מסמכים מ-Firestore
+    const fetchLegalDocs = async () => {
       try {
-        const termsRef = doc(db, 'settings', 'legal');
-        const termsSnap = await getDoc(termsRef);
-        if (termsSnap.exists() && termsSnap.data().termsText) {
-          setTermsText(termsSnap.data().termsText);
-        } else {
-          setTermsText('תנאי השימוש טרם הוזנו במערכת. אנא פנה למנהל המערכת.');
-        }
-      } catch (error) {
-        console.error('Error fetching terms:', error);
-        setTermsText('שגיאה בטעינת תנאי השימוש.');
+        const termsSnap = await getDoc(doc(db, 'settings', 'terms'));
+        const termsData = termsSnap.exists() && termsSnap.data().text 
+          ? termsSnap.data().text 
+          : 'תקנון תנאי שימוש טרם הוזן במערכת.';
+        
+        const privacySnap = await getDoc(doc(db, 'settings', 'privacy'));
+        const privacyData = privacySnap.exists() && privacySnap.data().text 
+          ? privacySnap.data().text 
+          : 'מדיניות פרטיות טרם הוזנה במערכת.';
+
+        setLegalTexts({ terms: termsData, privacy: privacyData });
+      } catch (err) {
+        console.error('Error fetching legal docs:', err);
+        setLegalTexts({ terms: 'שגיאה בטעינת המסמך.', privacy: 'שגיאה בטעינת המסמך.' });
       }
     };
     
-    fetchTerms();
+    fetchLegalDocs();
   }, []);
 
   const validateInput = () => {
@@ -79,7 +85,7 @@ export default function Register({ tagId }: RegisterProps) {
     }
 
     if (!termsAccepted) {
-      alert('חובה לקרוא ולאשר את תנאי השימוש וההגנה המשפטית כדי להמשיך.');
+      alert('חובה לקרוא ולאשר את תנאי השימוש ומדיניות הפרטיות כדי להמשיך.');
       isValid = false;
     }
 
@@ -114,7 +120,7 @@ export default function Register({ tagId }: RegisterProps) {
         photoURL = await getDownloadURL(snapshot.ref);
       }
 
-      // שמירת הנתונים ב-Firestore עבור Recognition Live עם התיעוד המשפטי
+      // שמירת הנתונים ב-Firestore יחד עם ההסכמה המשפטית המפוצלת
       await setDoc(doc(db, "users", tagId), {
         ...formData,
         tagId: tagId,
@@ -123,7 +129,8 @@ export default function Register({ tagId }: RegisterProps) {
         firstName: formData.fullName.split(' ')[0], 
         lastName: formData.fullName.split(' ').slice(1).join(' ') || '',
         legalConsent: {
-          accepted: true,
+          acceptedTerms: true,
+          acceptedPrivacy: true,
           timestamp: new Date(),
           ipAddress: clientIP || 'Unknown IP',
           userAgent: navigator.userAgent
@@ -207,22 +214,22 @@ export default function Register({ tagId }: RegisterProps) {
                 <textarea name="notes" placeholder="רגישויות, מחלות רקע..." onChange={handleChange} rows={3} style={{ ...inputStyle, height: 'auto' }} />
             </div>
 
-            {/* --- אזור תנאי השימוש --- */}
+            {/* --- אזור ההסכמה המשפטית --- */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '10px', border: termsAccepted ? '1px solid #10b981' : '1px solid #e2e8f0', transition: 'all 0.3s ease' }}>
                 <input 
                   type="checkbox" 
                   checked={termsAccepted} 
                   onChange={() => {
                     if (!termsAccepted) {
-                      setShowTermsModal(true); // פותח מודל במידה ועוד לא אושר
+                      setShowLegalModal(true); 
                     } else {
-                      setTermsAccepted(false); // מאפשר הסרת סימון
+                      setTermsAccepted(false); 
                     }
                   }} 
                   style={{ width: '22px', height: '22px', cursor: 'pointer', accentColor: '#2563eb', flexShrink: 0 }} 
                 />
-                <span style={{ fontSize: '13px', color: '#475569', cursor: 'pointer', lineHeight: '1.4' }} onClick={() => setShowTermsModal(true)}>
-                  קראתי ואני מאשר/ת את <strong style={{ color: '#2563eb', textDecoration: 'underline' }}>תנאי השימוש וההגנה המשפטית</strong>
+                <span style={{ fontSize: '13px', color: '#475569', cursor: 'pointer', lineHeight: '1.4' }} onClick={() => setShowLegalModal(true)}>
+                  קראתי ואני מאשר/ת את <strong style={{ color: '#2563eb', textDecoration: 'underline' }}>תנאי השימוש ומדיניות הפרטיות</strong>
                 </span>
             </div>
 
@@ -237,34 +244,53 @@ export default function Register({ tagId }: RegisterProps) {
         </div>
       </div>
 
-      {/* --- מודל (פופ-אפ) תנאי שימוש --- */}
-      {showTermsModal && (
+      {/* --- מודל (פופ-אפ) תנאי שימוש ופרטיות --- */}
+      {showLegalModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.75)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '20px', backdropFilter: 'blur(4px)' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '450px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
             
             <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#f8fafc', borderTopLeftRadius: '20px', borderTopRightRadius: '20px' }}>
-              <h3 style={{ margin: 0, color: '#0f172a', textAlign: 'center', fontSize: '18px', fontWeight: '900' }}>תנאי שימוש והסרת אחריות</h3>
+              <h3 style={{ margin: 0, color: '#0f172a', textAlign: 'center', fontSize: '18px', fontWeight: '900', marginBottom: '16px' }}>הסכמים משפטיים</h3>
+              
+              <div style={{ display: 'flex', gap: '8px', background: '#e2e8f0', padding: '4px', borderRadius: '10px' }}>
+                <button 
+                  type="button"
+                  onClick={() => setLegalTab('terms')} 
+                  style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', background: legalTab === 'terms' ? 'white' : 'transparent', color: legalTab === 'terms' ? '#2563eb' : '#64748b', fontWeight: 'bold', cursor: 'pointer', boxShadow: legalTab === 'terms' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s', fontSize: '13px' }}
+                >
+                  תנאי שימוש
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setLegalTab('privacy')} 
+                  style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', background: legalTab === 'privacy' ? 'white' : 'transparent', color: legalTab === 'privacy' ? '#2563eb' : '#64748b', fontWeight: 'bold', cursor: 'pointer', boxShadow: legalTab === 'privacy' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s', fontSize: '13px' }}
+                >
+                  מדיניות פרטיות
+                </button>
+              </div>
             </div>
             
             <div style={{ padding: '24px', overflowY: 'auto', fontSize: '14px', color: '#334155', lineHeight: '1.7', whiteSpace: 'pre-wrap' }}>
-              {termsText}
+              {legalTab === 'terms' ? legalTexts.terms : legalTexts.privacy}
             </div>
             
             <div style={{ padding: '20px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: '12px', backgroundColor: '#f8fafc', borderBottomLeftRadius: '20px', borderBottomRightRadius: '20px' }}>
               <button 
-                onClick={() => setShowTermsModal(false)} 
+                type="button"
+                onClick={() => setShowLegalModal(false)} 
                 style={{ flex: 1, padding: '14px', backgroundColor: 'white', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '15px' }}
               >
                 ביטול
               </button>
               <button 
+                type="button"
                 onClick={() => {
                   setTermsAccepted(true);
-                  setShowTermsModal(false);
+                  setShowLegalModal(false);
                 }} 
                 style={{ flex: 2, padding: '14px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '15px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
               >
-                קראתי ואני מסכים/ה
+                אני מסכים/ה לשני המסמכים
               </button>
             </div>
 

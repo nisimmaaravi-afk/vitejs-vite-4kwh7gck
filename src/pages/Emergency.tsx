@@ -39,6 +39,10 @@ export default function Emergency({ tagId }: { tagId: string }) {
   // טיימר ליציאה ממסך מוקפא
   const [countdown, setCountdown] = useState(10); 
 
+  // --- סטייטים עבור מסמכים משפטיים נפרדים ---
+  const [legalModalType, setLegalModalType] = useState<'terms' | 'privacy' | null>(null);
+  const [legalTexts, setLegalTexts] = useState({ terms: 'טוען...', privacy: 'טוען...' });
+
   const MASTER_CODE = '65942229';
 
   const getFirstName = (name: string): string => {
@@ -65,6 +69,29 @@ export default function Emergency({ tagId }: { tagId: string }) {
     fetchPatient();
   }, [tagId]);
 
+  // משיכת שני המסמכים המשפטיים בנפרד בעת טעינת המסך
+  useEffect(() => {
+    const fetchLegalDocs = async () => {
+      try {
+        const termsSnap = await getDoc(doc(db, 'settings', 'terms'));
+        const termsData = termsSnap.exists() && termsSnap.data().text 
+          ? termsSnap.data().text 
+          : 'תקנון תנאי שימוש טרם הוזן במערכת.';
+        
+        const privacySnap = await getDoc(doc(db, 'settings', 'privacy'));
+        const privacyData = privacySnap.exists() && privacySnap.data().text 
+          ? privacySnap.data().text 
+          : 'מדיניות פרטיות טרם הוזנה במערכת.';
+
+        setLegalTexts({ terms: termsData, privacy: privacyData });
+      } catch (err) {
+        console.error('Error fetching legal docs:', err);
+        setLegalTexts({ terms: 'שגיאה בטעינת המסמך.', privacy: 'שגיאה בטעינת המסמך.' });
+      }
+    };
+    fetchLegalDocs();
+  }, []);
+
   // טיימר למסך הצלחה (אירוע טופל)
   useEffect(() => {
     if (reportSubmitted) {
@@ -75,7 +102,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
     }
   }, [reportSubmitted]);
 
-  // ✅ טיימר חדש למסך מוקפא / לא קיים
+  // טיימר חדש למסך מוקפא / לא קיים
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (notFound || patient?.status === 'frozen') {
@@ -399,8 +426,8 @@ export default function Emergency({ tagId }: { tagId: string }) {
           "פוסט טראומה היא תווית שלא מבקשים, אבל הכרה היא תווית שכולנו ראויים לה."
         </p>
         <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-          <span>מדיניות פרטיות</span>
-          <span>תנאי שימוש</span>
+          <span onClick={() => setLegalModalType('privacy')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>מדיניות פרטיות</span>
+          <span onClick={() => setLegalModalType('terms')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>תנאי שימוש</span>
           <span>© 2026 Recognition Live Systems</span>
         </div>
       </footer>
@@ -479,6 +506,30 @@ export default function Emergency({ tagId }: { tagId: string }) {
               }}>
               {isSubmitting ? 'שולח...' : (eventType === 'test' ? 'סיים בדיקה' : 'שלח וסיים אירוע')}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- מודל מסמכים משפטיים --- */}
+      {legalModalType && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.75)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '20px', backdropFilter: 'blur(4px)', direction: 'rtl' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '450px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', position: 'relative' }}>
+            <button onClick={() => setLegalModalType(null)} style={{ position: 'absolute', top: '16px', left: '16px', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex' }}>
+              <X size={22} />
+            </button>
+            <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#f8fafc', borderTopLeftRadius: '20px', borderTopRightRadius: '20px' }}>
+              <h3 style={{ margin: 0, color: '#0f172a', textAlign: 'center', fontSize: '18px', fontWeight: '900' }}>
+                {legalModalType === 'terms' ? 'תנאי שימוש והסרת אחריות' : 'מדיניות פרטיות'}
+              </h3>
+            </div>
+            <div style={{ padding: '24px', overflowY: 'auto', fontSize: '14px', color: '#334155', lineHeight: '1.7', whiteSpace: 'pre-wrap' }}>
+              {legalModalType === 'terms' ? legalTexts.terms : legalTexts.privacy}
+            </div>
+            <div style={{ padding: '20px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'center', backgroundColor: '#f8fafc', borderBottomLeftRadius: '20px', borderBottomRightRadius: '20px' }}>
+              <button onClick={() => setLegalModalType(null)} style={{ padding: '12px 32px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '15px' }}>
+                סגור מסמך
+              </button>
+            </div>
           </div>
         </div>
       )}

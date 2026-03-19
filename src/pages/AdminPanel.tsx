@@ -69,7 +69,10 @@ const AdminPanel: React.FC = () => {
   const [visiblePatientsCount, setVisiblePatientsCount] = useState(50);
   const [visibleFeedCount, setVisibleFeedCount] = useState(50);
 
+  // ---- State למערכת תנאי השימוש והפרטיות (Legal) ----
   const [termsText, setTermsText] = useState('');
+  const [privacyText, setPrivacyText] = useState('');
+  const [legalEditTab, setLegalEditTab] = useState<'terms' | 'privacy'>('terms');
   const [showTermsEdit, setShowTermsEdit] = useState(false);
   const [isSavingTerms, setIsSavingTerms] = useState(false);
   const [consentModalData, setConsentModalData] = useState<Patient | null>(null);
@@ -156,12 +159,20 @@ const AdminPanel: React.FC = () => {
 
       setStats({ totalUsers: patList.length, scans24h: scansInLast24h });
 
-      const termsRef = doc(db, 'settings', 'legal');
-      const termsSnap = await getDoc(termsRef);
-      if (termsSnap.exists()) {
-        setTermsText(termsSnap.data().termsText || '');
+      // שאיבת תקנון תנאי שימוש
+      const termsSnap = await getDoc(doc(db, 'settings', 'terms'));
+      if (termsSnap.exists() && termsSnap.data().text) {
+        setTermsText(termsSnap.data().text);
       } else {
-        setTermsText("1. כללי\nמערכת Recognition Live נועדה לשמש ככלי טכנולוגי מסייע לזיהוי וניהול מקרי מצוקה בלבד. המערכת אינה מחליפה טיפול רפואי, פסיכיאטרי או שירותי חירום מקצועיים של המדינה.\n\n2. הסרת אחריות מוחלטת\nהמפתחים, הבעלים, והגופים הקשורים למערכת אינם נושאים באחריות משפטית, פלילית או אזרחית לנזק ישיר או עקיף, פיזי, רכושי או נפשי, שייגרם כתוצאה משימוש בצמיד, אי-זמינות המערכת, תקלות רשת, פגמים בשרתים או זמני תגובה של כוחות ההצלה בשטח.\n\n3. פרטיות, מאגרי מידע ומעקב\nהנך מסכים/ה במפורש לכך שהמידע האישי והרפואי שיוזן במערכת יישמר בשרתי הפרויקט ויוצג באופן אוטומטי לכוחות הצלה, ביטחון או רשויות מורשות מיד עם סריקת הצמיד. אנו מתעדים ושומרים פרטים כגון כתובת IP, חותמת זמן מדויקת וסוג הדפדפן לצורכי אבטחה, בקרה משפטית ומניעת הונאות.\n\n4. הסכמה מדעת\nבעצם לחיצה על כפתור האישור, הנך מצהיר/ה כי קראת את התנאים, שהפרטים שנמסרו נכונים, וכי השימוש בצמיד ובמערכת נעשה מרצונך החופשי, באחריותך הבלעדית ובהבנה מלאה של מגבלות הטכנולוגיה.");
+        setTermsText("1. כללי\nמערכת Recognition Live נועדה לשמש ככלי טכנולוגי מסייע לזיהוי וניהול מקרי מצוקה בלבד.\n\n2. הסרת אחריות מוחלטת\nהמפתחים אינם נושאים באחריות משפטית, פלילית או אזרחית לנזק ישיר או עקיף.");
+      }
+
+      // שאיבת מדיניות פרטיות
+      const privacySnap = await getDoc(doc(db, 'settings', 'privacy'));
+      if (privacySnap.exists() && privacySnap.data().text) {
+        setPrivacyText(privacySnap.data().text);
+      } else {
+        setPrivacyText("מדיניות פרטיות:\n\n1. איסוף נתונים\nאנו מתעדים ושומרים פרטים כגון כתובת IP, חותמת זמן וסוג דפדפן לצורכי אבטחה, בקרה משפטית ומניעת הונאות.\n\n2. שיתוף מידע\nהמידע מוצג אך ורק לגורמי הצלה וביטחון מורשים.");
       }
 
     } catch (error) {
@@ -172,12 +183,13 @@ const AdminPanel: React.FC = () => {
   const handleSaveTerms = async () => {
     setIsSavingTerms(true);
     try {
-      await setDoc(doc(db, 'settings', 'legal'), { termsText, updatedAt: new Date() }, { merge: true });
+      await setDoc(doc(db, 'settings', 'terms'), { text: termsText, updatedAt: new Date() }, { merge: true });
+      await setDoc(doc(db, 'settings', 'privacy'), { text: privacyText, updatedAt: new Date() }, { merge: true });
       setShowTermsEdit(false);
-      alert('התקנון נשמר בהצלחה!');
+      alert('המסמכים המשפטיים נשמרו בהצלחה!');
     } catch (error) {
       console.error("Error saving terms:", error);
-      alert('שגיאה בשמירת התקנון.');
+      alert('שגיאה בשמירת המסמכים.');
     }
     setIsSavingTerms(false);
   };
@@ -642,7 +654,7 @@ const AdminPanel: React.FC = () => {
           <div style={s.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <h2 style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}><FileText size={16} color="#94a3b8" /> מסמכים משפטיים</h2>
-              <button onClick={() => setShowTermsEdit(true)} style={{ padding: '6px 10px', backgroundColor: '#f1f5f9', color: '#475569', borderRadius: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>ערוך תקנון</button>
+              <button onClick={() => setShowTermsEdit(true)} style={{ padding: '6px 10px', backgroundColor: '#f1f5f9', color: '#475569', borderRadius: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>ערוך מסמכים</button>
             </div>
           </div>
 
@@ -890,7 +902,7 @@ const AdminPanel: React.FC = () => {
               <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '20px', marginTop: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <h2 style={{ fontSize: '16px', fontWeight: 900, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}><FileText size={16} color="#94a3b8" /> מסמכים משפטיים</h2>
-                  <button onClick={() => setShowTermsEdit(true)} style={{ padding: '6px 10px', backgroundColor: '#f1f5f9', color: '#475569', borderRadius: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>ערוך תקנון</button>
+                  <button onClick={() => setShowTermsEdit(true)} style={{ padding: '6px 10px', backgroundColor: '#f1f5f9', color: '#475569', borderRadius: '6px', border: '1px solid #cbd5e1', fontWeight: 'bold', cursor: 'pointer', fontSize: '12px' }}>ערוך מסמכים</button>
                 </div>
               </div>
 
@@ -973,14 +985,15 @@ const AdminPanel: React.FC = () => {
             <h3 style={{ fontSize: '20px', fontWeight: 900, textAlign: 'center', margin: '0 0 20px 0', color: '#0f172a' }}>אישורים משפטיים</h3>
             {consentModalData.legalConsent ? (
               <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#334155', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                <p style={{ margin: '0 0 8px 0' }}><strong>סטטוס:</strong> <span style={{ color: '#10b981', fontWeight: 'bold' }}>✅ אושר</span></p>
+                <p style={{ margin: '0 0 8px 0' }}><strong>אישור תנאי שימוש:</strong> <span style={{ color: '#10b981', fontWeight: 'bold' }}>✅ אושר</span></p>
+                <p style={{ margin: '0 0 8px 0' }}><strong>אישור מדיניות פרטיות:</strong> <span style={{ color: '#10b981', fontWeight: 'bold' }}>✅ אושר</span></p>
                 <p style={{ margin: '0 0 8px 0' }}><strong>תאריך חתימה:</strong><br/>{consentModalData.legalConsent.timestamp?.toDate ? consentModalData.legalConsent.timestamp.toDate().toLocaleString('he-IL') : 'לא זמין'}</p>
                 <p style={{ margin: '0 0 8px 0' }}><strong>כתובת IP:</strong><br/>{consentModalData.legalConsent.ipAddress || 'לא זמין'}</p>
                 <p style={{ margin: 0, wordBreak: 'break-word' }}><strong>מכשיר/דפדפן:</strong><br/>{consentModalData.legalConsent.userAgent || 'לא זמין'}</p>
               </div>
             ) : (
               <div style={{ textAlign: 'center', color: '#ef4444', fontWeight: 'bold', padding: '20px 0', background: '#fef2f2', borderRadius: '12px', border: '1px solid #fecaca' }}>
-                ⚠️ המבוטח טרם אישר את תנאי השימוש במערכת.
+                ⚠️ המבוטח טרם אישר את מסמכי המערכת.
               </div>
             )}
             <button onClick={() => setConsentModalData(null)} style={{...s.btnSecondary, marginTop: '20px'}}>סגור</button>
@@ -988,19 +1001,36 @@ const AdminPanel: React.FC = () => {
         </div>
       )}
 
-      {/* מודל עריכת תקנון משפטי */}
+      {/* מודל עריכת מסמכים משפטיים */}
       {showTermsEdit && (
         <div style={s.overlay}>
           <div style={{...s.modal, maxWidth: '700px'}}>
-            <h3 style={{ fontSize: '22px', fontWeight: 900, textAlign: 'center', margin: '0 0 20px 0', color: '#0f172a' }}>עריכת תנאי שימוש (מוצג למשתמשים ברישום)</h3>
-            <textarea 
-              value={termsText} 
-              onChange={(e) => setTermsText(e.target.value)} 
-              style={{...s.input, height: '350px', resize: 'vertical', fontFamily: 'system-ui', direction: 'rtl', lineHeight: '1.6'}} 
-            />
+            <h3 style={{ fontSize: '22px', fontWeight: 900, textAlign: 'center', margin: '0 0 20px 0', color: '#0f172a' }}>עריכת מסמכים משפטיים</h3>
+            
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', background: '#f1f5f9', padding: '6px', borderRadius: '12px' }}>
+              <button onClick={() => setLegalEditTab('terms')} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: legalEditTab === 'terms' ? 'white' : 'transparent', color: legalEditTab === 'terms' ? '#2563eb' : '#64748b', fontWeight: 'bold', cursor: 'pointer', boxShadow: legalEditTab === 'terms' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>תנאי שימוש</button>
+              <button onClick={() => setLegalEditTab('privacy')} style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: legalEditTab === 'privacy' ? 'white' : 'transparent', color: legalEditTab === 'privacy' ? '#2563eb' : '#64748b', fontWeight: 'bold', cursor: 'pointer', boxShadow: legalEditTab === 'privacy' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>מדיניות פרטיות</button>
+            </div>
+
+            {legalEditTab === 'terms' ? (
+              <textarea 
+                value={termsText} 
+                onChange={(e) => setTermsText(e.target.value)} 
+                placeholder="הכנס את תנאי השימוש כאן..."
+                style={{...s.input, height: '350px', resize: 'vertical', fontFamily: 'system-ui', direction: 'rtl', lineHeight: '1.6'}} 
+              />
+            ) : (
+              <textarea 
+                value={privacyText} 
+                onChange={(e) => setPrivacyText(e.target.value)} 
+                placeholder="הכנס את מדיניות הפרטיות כאן..."
+                style={{...s.input, height: '350px', resize: 'vertical', fontFamily: 'system-ui', direction: 'rtl', lineHeight: '1.6'}} 
+              />
+            )}
+
             <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
               <button onClick={() => setShowTermsEdit(false)} style={s.btnSecondary}>ביטול</button>
-              <button onClick={handleSaveTerms} disabled={isSavingTerms} style={s.btnPrimary}>{isSavingTerms ? 'שומר...' : 'שמור תקנון'}</button>
+              <button onClick={handleSaveTerms} disabled={isSavingTerms} style={s.btnPrimary}>{isSavingTerms ? 'שומר...' : 'שמור מסמכים'}</button>
             </div>
           </div>
         </div>
