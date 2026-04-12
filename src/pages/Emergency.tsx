@@ -310,7 +310,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
           <span>Recognition Live <span style={{ color: '#2563eb' }}>חירום</span></span>
         </div>
         <span style={{ background: '#fee2e2', color: '#dc2626', fontSize: '10px', fontWeight: 800, padding: '4px 10px', borderRadius: '20px', letterSpacing: '0.5px' }}>
-          ● מצב חירום פעיל
+          ● אני חווה רגע של מצוקה בבקשה עזרו לי לפי ההנחיות
         </span>
       </header>
 
@@ -346,8 +346,8 @@ export default function Emergency({ tagId }: { tagId: string }) {
                 <Phone size={26} />
               </div>
             </div>
-            <div style={{ textAlign: 'center', fontWeight: 900, fontSize: '16px', background: 'rgba(255,255,255,0.15)', borderRadius: '10px', padding: '12px', letterSpacing: '0.5px' }}>
-              חייג בעת צרה
+            <div style={{ textAlign: 'center', fontWeight: 900, fontSize: '14px', background: 'rgba(255,255,255,0.15)', borderRadius: '10px', padding: '12px', letterSpacing: '0.2px', whiteSpace: 'nowrap' }}>
+              הם יודעים איך לעזור לי
             </div>
           </a>
         </div>
@@ -361,8 +361,8 @@ export default function Emergency({ tagId }: { tagId: string }) {
             {[
               { icon: VolumeX, t: 'דברו איתי בשקט', d: 'שמרו על קול נמוך ורגוע.' },
               { icon: Hand, t: 'אל תגעו בי', d: 'מגע פיזי עלול לגרום לתגובה.' },
-              { icon: PersonStanding, t: 'תנו לי מרחב של 1.5 מטר', d: 'שמרו על מרחק אלא אם יש סכנה מידית.' },
-              { icon: Moon, t: 'עברו לאזור שקט', d: 'עצור התקהלות של אנשים מסביב.' },
+              { icon: PersonStanding, t: 'שמרו מרחק של 2 צעדים', d: 'שמרו על מרחק אלא אם יש סכנה מידית.' },
+              { icon: Moon, t: 'עזרו לי להגיע למקום שקט', d: 'עצור התקהלות של אנשים מסביב.' },
             ].map((item, i) => (
               <div key={i} style={{ display: 'flex', gap: '10px', padding: '12px', background: '#f8fafc', borderRadius: '12px', alignItems: 'flex-start' }}>
                 <item.icon color="#3b82f6" size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
@@ -510,7 +510,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
         </div>
       )}
 
-      {/* --- מודל מסמכים משפטיים --- */}
       {legalModalType && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.75)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999, padding: '20px', backdropFilter: 'blur(4px)', direction: 'rtl' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '450px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', position: 'relative' }}>
