@@ -261,6 +261,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
     );
   }
 
+  // שורת ההגנה שפותרת את כל השגיאות של TypeScript
   if (!patient) return null;
 
   // --- מצב אחרי דיווח ---
@@ -377,17 +378,39 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </div>
         </div>
 
-        {/* קוביית התקרקעות חדשה בנפרד לחלוטין */}
+        {/* קוביית התקרקעות חדשה, ממורכזת ומופרדת */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+          <div style={{ 
+            background: '#f8fafc', 
+            borderRadius: '12px', 
+            padding: '20px',
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            textAlign: 'center',
+            gap: '12px' 
+          }}>
             <div style={{ background: '#eff6ff', padding: '12px', borderRadius: '12px', flexShrink: 0 }}>
-              <Eye color="#2563eb" size={24} />
+              <Eye color="#2563eb" size={28} />
             </div>
-            <div>
-              <p style={{ fontWeight: 800, fontSize: '15px', color: '#0f172a', margin: '0 0 6px 0' }}>עזרו לי לחזור לכאן ועכשיו</p>
-              <p style={{ fontSize: '13px', color: '#64748b', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-line' }}>
-                {`בקשו ממני לתאר לאט:\n• 5 דברים שאני רואה\n• 4 דברים שאני מרגיש\n• 3 צלילים סביבי`}
+            <div style={{ width: '100%' }}>
+              <p style={{ fontWeight: 900, fontSize: '16px', color: '#0f172a', margin: '0 0 8px 0' }}>עזרו לי לחזור לכאן ועכשיו</p>
+              <p style={{ fontWeight: 700, fontSize: '14px', color: '#334155', margin: '0 0 12px 0' }}>
+                בקשו ממני לתאר לאט:
               </p>
+              <div style={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: '6px', 
+                direction: 'rtl',
+                fontWeight: 900, 
+                fontSize: '15px', 
+                color: '#2563eb' 
+              }}>
+                <span>5 דברים שאני רואה</span>
+                <span>4 דברים שאני מרגיש</span>
+                <span>3 צלילים סביבי</span>
+              </div>
             </div>
           </div>
         </div>
