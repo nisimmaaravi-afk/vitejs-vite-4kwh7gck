@@ -361,9 +361,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
             ) : (
               <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontWeight: 700 }}>תמונה</div>
             )}
-            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px 12px 10px', background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%)' }}>
-              <p style={{ color: 'white', fontSize: '16px', fontWeight: 900, margin: 0 }}>{patient.fullName}</p>
-            </div>
           </div>
 
           <a href={`tel:${patient.emergencyPhone}`} style={{
@@ -431,6 +428,9 @@ export default function Emergency({ tagId }: { tagId: string }) {
 
         {/* 4 קוביות הנחיה תחתונות - נצבעות בכחול בעת לחיצה ופותחות חלון קופץ */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <div style={{ fontWeight: 800, fontSize: '15px', marginBottom: '12px', color: '#2563eb' }}>
+            הנחיות לביצוע
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
             {protocolCards.map((item, i) => {
               const isSelected = activeBottomCardIndex === i;
