@@ -330,7 +330,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
             )}
             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px 12px 10px', background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%)' }}>
               <p style={{ color: 'white', fontSize: '16px', fontWeight: 900, margin: 0 }}>{patient.fullName}</p>
-              <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.5px', marginTop: '2px' }}>נושא צמיד PTSD</p>
             </div>
           </div>
 
