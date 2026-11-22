@@ -697,4 +697,4 @@ export default function Emergency({ tagId }: { tagId: string }) {
       )}
     </div>
   );
-}
+}S
