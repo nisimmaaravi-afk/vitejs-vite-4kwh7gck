@@ -386,7 +386,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </a>
         </div>
 
-        {/* 4 קוביות עליונות זהות בגודל הקיים */}
+        {/* 4 קוביות עליונות בגודל התואם לקוביות התחתונות עם מלל מוגדל פרופורציונלית */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           <div style={{ fontWeight: 800, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#2563eb' }}>
             <Heart size={18} fill="#2563eb" color="#2563eb" />
@@ -402,7 +402,8 @@ export default function Emergency({ tagId }: { tagId: string }) {
                   style={{
                     display: 'flex',
                     gap: '10px',
-                    padding: '12px',
+                    minHeight: '84px',
+                    padding: '14px 16px',
                     background: isSelected ? 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)' : '#f8fafc',
                     color: isSelected ? 'white' : '#0f172a',
                     borderRadius: '12px',
@@ -412,8 +413,8 @@ export default function Emergency({ tagId }: { tagId: string }) {
                     transition: 'all 0.2s'
                   }}
                 >
-                  <item.icon color={isSelected ? 'white' : '#3b82f6'} size={18} style={{ flexShrink: 0 }} />
-                  <p style={{ fontWeight: 700, fontSize: '13px', color: isSelected ? 'white' : '#0f172a', margin: 0 }}>{item.label}</p>
+                  <item.icon color={isSelected ? 'white' : '#3b82f6'} size={22} style={{ flexShrink: 0 }} />
+                  <p style={{ fontWeight: 800, fontSize: '15px', lineHeight: 1.3, color: isSelected ? 'white' : '#0f172a', margin: 0 }}>{item.label}</p>
                 </div>
               );
             })}
@@ -432,6 +433,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
                   style={{
                     display: 'flex',
                     gap: '10px',
+                    minHeight: '84px',
                     padding: '12px',
                     background: isSelected ? 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)' : '#f8fafc',
                     color: isSelected ? 'white' : '#0f172a',
