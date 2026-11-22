@@ -317,7 +317,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </p>
           <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '24px', marginBottom: '28px' }}>
             <p style={{ fontSize: '15px', fontWeight: 600, color: '#334155', fontStyle: 'italic', lineHeight: 1.6 }}>
-              "הצמיד הזה הוא לא רק סמל – הוא הצהרה שכולנו ראויים להכרה, לכבוד ולתמיכה. יחד, אנחנו יכולים לשנות את הדרך שבה החברה שלנו מתייחסת למתמודדים עם פוסט-טראומה."
+              "הצמיד הזה הוא לא רק סמל – הוא הצהרה שכולנו ראויים להכרה, לכבוד ולתמיכה. יחד, אנחנו יכולים לשנות את הדרך שבה החברה שלנו מתייחסת למתמודדים עם אוטיזם."
             </p>
           </div>
           <div style={{ width: '100%', background: '#e2e8f0', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
