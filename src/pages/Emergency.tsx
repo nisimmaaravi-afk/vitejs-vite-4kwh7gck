@@ -3,7 +3,8 @@ import { doc, getDoc, addDoc, collection, serverTimestamp, query, where, getDocs
 import { db } from '../services/firebase';
 import {
   Phone, Heart, VolumeX, Hand, PersonStanding,
-  Moon, AlertTriangle, X, CheckCircle, Shield, Info, HeadphonesIcon, Eye
+  Moon, AlertTriangle, X, CheckCircle, Shield, Info, HeadphonesIcon,
+  Droplets, Headphones
 } from 'lucide-react';
 
 interface PatientData {
@@ -35,7 +36,8 @@ export default function Emergency({ tagId }: { tagId: string }) {
   const [notFound, setNotFound] = useState(false);
   
   const [handlerOrg, setHandlerOrg] = useState<string>('אזרח / לא ידוע');
-  const [activeCardIndex, setActiveCardIndex] = useState<number | null>(null);
+  const [activeTopCardIndex, setActiveTopCardIndex] = useState<number | null>(null);
+  const [activeBottomCardIndex, setActiveBottomCardIndex] = useState<number | null>(null);
 
   // טיימר ליציאה ממסך מוקפא
   const [countdown, setCountdown] = useState(10); 
@@ -185,6 +187,13 @@ export default function Emergency({ tagId }: { tagId: string }) {
       setIsSubmitting(false);
     }
   };
+
+  const topQuickCards = [
+    { icon: VolumeX, label: 'צריך שקט' },
+    { icon: Droplets, label: 'רוצה מים' },
+    { icon: Headphones, label: 'איפה האוזניות שלי' },
+    { icon: Phone, label: 'נא להתקשר למשפחה' },
+  ];
 
   const protocolCards = [
     {
@@ -377,19 +386,49 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </a>
         </div>
 
-        {/* 4 קוביות ההנחיה בגודל הקיים - נצבעות בכחול בעת לחיצה ופותחות חלון קופץ */}
+        {/* 4 קוביות עליונות זהות בגודל הקיים */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           <div style={{ fontWeight: 800, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#2563eb' }}>
             <Heart size={18} fill="#2563eb" color="#2563eb" />
             פעל על פי פרוטוקול הכרה
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            {protocolCards.map((item, i) => {
-              const isSelected = activeCardIndex === i;
+            {topQuickCards.map((item, i) => {
+              const isSelected = activeTopCardIndex === i;
               return (
                 <div
                   key={i}
-                  onClick={() => setActiveCardIndex(i)}
+                  onClick={() => setActiveTopCardIndex(prev => prev === i ? null : i)}
+                  style={{
+                    display: 'flex',
+                    gap: '10px',
+                    padding: '12px',
+                    background: isSelected ? 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)' : '#f8fafc',
+                    color: isSelected ? 'white' : '#0f172a',
+                    borderRadius: '12px',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    boxShadow: isSelected ? '0 6px 20px rgba(37,99,235,0.35)' : 'none',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <item.icon color={isSelected ? 'white' : '#3b82f6'} size={18} style={{ flexShrink: 0 }} />
+                  <p style={{ fontWeight: 700, fontSize: '13px', color: isSelected ? 'white' : '#0f172a', margin: 0 }}>{item.label}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 4 קוביות הנחיה תחתונות - נצבעות בכחול בעת לחיצה ופותחות חלון קופץ */}
+        <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            {protocolCards.map((item, i) => {
+              const isSelected = activeBottomCardIndex === i;
+              return (
+                <div
+                  key={i}
+                  onClick={() => setActiveBottomCardIndex(i)}
                   style={{
                     display: 'flex',
                     gap: '10px',
@@ -415,12 +454,12 @@ export default function Emergency({ tagId }: { tagId: string }) {
         </div>
 
         {/* חלון קופץ עם הכותרת המודגשת והטקסט המלא */}
-        {activeCardIndex !== null && (() => {
-          const activeItem = protocolCards[activeCardIndex];
+        {activeBottomCardIndex !== null && (() => {
+          const activeItem = protocolCards[activeBottomCardIndex];
           const ActiveIcon = activeItem.icon;
           return (
             <div
-              onClick={() => setActiveCardIndex(null)}
+              onClick={() => setActiveBottomCardIndex(null)}
               style={{
                 position: 'fixed',
                 inset: 0,
@@ -452,7 +491,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
               >
                 <button
                   type="button"
-                  onClick={() => setActiveCardIndex(null)}
+                  onClick={() => setActiveBottomCardIndex(null)}
                   style={{
                     position: 'absolute',
                     top: '18px',
@@ -477,7 +516,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
 
                 <button
                   type="button"
-                  onClick={() => setActiveCardIndex(null)}
+                  onClick={() => setActiveBottomCardIndex(null)}
                   style={{
                     marginTop: '8px',
                     width: '100%',
@@ -497,56 +536,6 @@ export default function Emergency({ tagId }: { tagId: string }) {
             </div>
           );
         })()}
-
-        {/* קוביית התקרקעות חדשה, ממורכזת ומופרדת */}
-        <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-          <div style={{ 
-            background: '#f8fafc', 
-            borderRadius: '12px', 
-            padding: '20px',
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
-            textAlign: 'center',
-            gap: '12px' 
-          }}>
-            <div style={{ background: '#eff6ff', padding: '12px', borderRadius: '12px', flexShrink: 0 }}>
-              <Eye color="#2563eb" size={28} />
-            </div>
-            <div style={{ width: '100%', direction: 'rtl', textAlign: 'right' }}>
-              <p style={{ fontWeight: 900, fontSize: '16px', color: '#0f172a', margin: '0 0 8px 0', textAlign: 'center' }}>עזרו לי לחזור לכאן ועכשיו</p>
-              <p style={{ fontWeight: 700, fontSize: '14px', color: '#334155', margin: '0 0 12px 0', textAlign: 'center' }}>
-                פעלו לפי השלבים הבאים, לאט ובביטחון:
-              </p>
-              <div style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                gap: '12px', 
-                fontWeight: 600, 
-                fontSize: '14px', 
-                color: '#334155',
-                lineHeight: '1.4'
-              }}>
-                <div>
-                  <span style={{ fontWeight: 900, color: '#2563eb' }}>1. מחויבות: </span>
-                  אמרו לי: "אני כאן איתך, אתה לא לבד, אנחנו במקום בטוח."
-                </div>
-                <div>
-                  <span style={{ fontWeight: 900, color: '#2563eb' }}>2. הפעלה יעילה: </span>
-                  תנו לי משימה קטנה וברורה: "קח בקבוק ושתה מים" או "עזור לי רגע להחזיק את זה."
-                </div>
-                <div>
-                  <span style={{ fontWeight: 900, color: '#2563eb' }}>3. שאלות חשיבה (אל תשאלו מה אני מרגיש!): </span>
-                  שאלו אותי שאלות עובדתיות: "לאן היית בדרך?" או "כמה אנשים עומדים סביבנו?"
-                </div>
-                <div>
-                  <span style={{ fontWeight: 900, color: '#2563eb' }}>4. הבניית האירוע: </span>
-                  תארו לי בקצרה שזה נגמר: "היה אירוע מלחיץ, אבל הוא הסתיים. אנחנו בטוחים עכשיו."
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* מידע רפואי - המבנה המקורי */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
