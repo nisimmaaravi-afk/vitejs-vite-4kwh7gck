@@ -377,7 +377,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </a>
         </div>
 
-        {/* 4 קוביות ההנחיה בגודל הקיים - נצבעות בכחול בעת לחיצה ופותחות כרטיסיית מסך מלא */}
+        {/* 4 קוביות ההנחיה בגודל הקיים - נצבעות בכחול בעת לחיצה ופותחות חלון קופץ */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           <div style={{ fontWeight: 800, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#2563eb' }}>
             <Heart size={18} fill="#2563eb" color="#2563eb" />
@@ -414,74 +414,84 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </div>
         </div>
 
-        {/* כרטיסיית מסך מלא לעובר האורח */}
+        {/* חלון קופץ עם הכותרת המודגשת והטקסט המלא */}
         {activeCardIndex !== null && (() => {
           const activeItem = protocolCards[activeCardIndex];
           const ActiveIcon = activeItem.icon;
           return (
             <div
+              onClick={() => setActiveCardIndex(null)}
               style={{
                 position: 'fixed',
                 inset: 0,
-                background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
-                color: 'white',
-                zIndex: 200,
-                padding: '24px 20px',
-                direction: 'rtl',
+                background: 'rgba(15,23,42,0.6)',
+                backdropFilter: 'blur(4px)',
                 display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                overflowY: 'auto'
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 200,
+                padding: '16px',
+                direction: 'rtl'
               }}
             >
-              <div style={{ maxWidth: '640px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 800, fontSize: '14px', opacity: 0.9 }}>פעל על פי פרוטוקול הכרה</span>
-                  <button
-                    type="button"
-                    onClick={() => setActiveCardIndex(null)}
-                    style={{
-                      background: 'rgba(255,255,255,0.2)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '10px',
-                      padding: '8px 14px',
-                      fontWeight: 800,
-                      fontSize: '14px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <X size={18} /> סגור
-                  </button>
-                </div>
-
-                <div style={{ background: 'rgba(255,255,255,0.14)', borderRadius: '20px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  <ActiveIcon size={34} color="white" />
-                  <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 900, lineHeight: 1.3 }}>{activeItem.t}</h2>
-                  <p style={{ margin: 0, fontSize: '18px', fontWeight: 600, lineHeight: 1.6 }}>{activeItem.d}</p>
-                </div>
-              </div>
-
-              <div style={{ maxWidth: '640px', width: '100%', margin: '24px auto 0' }}>
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                  color: 'white',
+                  borderRadius: '24px',
+                  padding: '28px 24px',
+                  width: '100%',
+                  maxWidth: '440px',
+                  boxShadow: '0 25px 80px rgba(0,0,0,0.25)',
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px'
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => setActiveCardIndex(null)}
                   style={{
+                    position: 'absolute',
+                    top: '18px',
+                    left: '18px',
+                    background: 'rgba(255,255,255,0.2)',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '6px',
+                    cursor: 'pointer',
+                    color: 'white',
+                    display: 'flex'
+                  }}
+                >
+                  <X size={20} />
+                </button>
+
+                <ActiveIcon size={30} color="white" />
+                <h3 style={{ margin: 0, fontSize: '21px', fontWeight: 900, lineHeight: 1.3 }}>{activeItem.t}</h3>
+                <p style={{ margin: 0, fontSize: '16px', fontWeight: 600, lineHeight: 1.55, color: 'rgba(255,255,255,0.95)' }}>
+                  {activeItem.d}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveCardIndex(null)}
+                  style={{
+                    marginTop: '8px',
                     width: '100%',
-                    padding: '16px',
+                    padding: '14px',
                     background: 'white',
                     color: '#1d4ed8',
                     border: 'none',
                     borderRadius: '14px',
                     fontWeight: 900,
-                    fontSize: '17px',
+                    fontSize: '16px',
                     cursor: 'pointer'
                   }}
                 >
-                  חזרה למסך
+                  סגור
                 </button>
               </div>
             </div>
