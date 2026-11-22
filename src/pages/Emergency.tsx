@@ -35,6 +35,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
   const [notFound, setNotFound] = useState(false);
   
   const [handlerOrg, setHandlerOrg] = useState<string>('אזרח / לא ידוע');
+  const [activeCardIndex, setActiveCardIndex] = useState<number | null>(null);
 
   // טיימר ליציאה ממסך מוקפא
   const [countdown, setCountdown] = useState(10); 
@@ -184,6 +185,29 @@ export default function Emergency({ tagId }: { tagId: string }) {
       setIsSubmitting(false);
     }
   };
+
+  const protocolCards = [
+    {
+      icon: PersonStanding,
+      t: 'שמרו מרחק ואל תיגעו',
+      d: 'צעדו 2 צעדים אחורה, אל תחבקו, אל תאחזו ואל תחסמו נתיב יציאה – אלא אם יש סכנה מיידית לחיים.'
+    },
+    {
+      icon: VolumeX,
+      t: 'שקט מרבי בלי שאלות וקשר עין',
+      d: 'רק אדם אחד מתקשר, בשתיקה או בקול שקט ובמילים ספורות; אל תדרשו דיבור או מבט בעיניים.'
+    },
+    {
+      icon: Moon,
+      t: 'הורידו גירויים וקהל',
+      d: 'פזרו סקרנים מסביב, בקשו להנמיך מוזיקה ואורות בהירים, ואל תיקחו ממני אוזניות, אביזרי ויסות או לוח תקשורת.'
+    },
+    {
+      icon: Hand,
+      t: 'אל תעצרו תנועות הרגעה (Stimming)',
+      d: 'נדנוד, נפנוף ידיים, קפיצה או כיסוי אוזניים הם מנגנון הוויסות שלי – אל תפריעו להם.'
+    }
+  ];
 
   // --- מצבי טעינה או שגיאה חמורה ---
   if (!patient && !notFound) {
@@ -353,29 +377,116 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </a>
         </div>
 
-        {/* 4 קוביות ההנחיה המקוריות */}
+        {/* 4 קוביות ההנחיה בגודל הקיים - נצבעות בכחול בעת לחיצה ופותחות כרטיסיית מסך מלא */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           <div style={{ fontWeight: 800, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#2563eb' }}>
             <Heart size={18} fill="#2563eb" color="#2563eb" />
             פעל על פי פרוטוקול הכרה
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-            {[
-              { icon: VolumeX, t: 'דברו איתי בשקט', d: 'שמרו על קול נמוך ורגוע.' },
-              { icon: Hand, t: 'אל תגעו בי', d: 'מגע פיזי עלול לגרום לתגובה.' },
-              { icon: PersonStanding, t: 'שמרו מרחק של 2 צעדים', d: 'שמרו על מרחק אלא אם יש סכנה מידית.' },
-              { icon: Moon, t: 'עזרו לי להגיע למקום שקט', d: 'עצור התקהלות של אנשים מסביב.' },
-            ].map((item, i) => (
-              <div key={i} style={{ display: 'flex', gap: '10px', padding: '12px', background: '#f8fafc', borderRadius: '12px', alignItems: 'flex-start' }}>
-                <item.icon color="#3b82f6" size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
-                <div>
-                  <p style={{ fontWeight: 700, fontSize: '13px', color: '#0f172a', margin: '0 0 2px' }}>{item.t}</p>
-                  <p style={{ fontSize: '11px', color: '#64748b', margin: 0, lineHeight: 1.4 }}>{item.d}</p>
+            {protocolCards.map((item, i) => {
+              const isSelected = activeCardIndex === i;
+              return (
+                <div
+                  key={i}
+                  onClick={() => setActiveCardIndex(i)}
+                  style={{
+                    display: 'flex',
+                    gap: '10px',
+                    padding: '12px',
+                    background: isSelected ? 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)' : '#f8fafc',
+                    color: isSelected ? 'white' : '#0f172a',
+                    borderRadius: '12px',
+                    alignItems: 'flex-start',
+                    cursor: 'pointer',
+                    boxShadow: isSelected ? '0 6px 20px rgba(37,99,235,0.35)' : 'none',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <item.icon color={isSelected ? 'white' : '#3b82f6'} size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <p style={{ fontWeight: 700, fontSize: '13px', color: isSelected ? 'white' : '#0f172a', margin: '0 0 2px' }}>{item.t}</p>
+                    <p style={{ fontSize: '11px', color: isSelected ? 'rgba(255,255,255,0.92)' : '#64748b', margin: 0, lineHeight: 1.4 }}>{item.d}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
+
+        {/* כרטיסיית מסך מלא לעובר האורח */}
+        {activeCardIndex !== null && (() => {
+          const activeItem = protocolCards[activeCardIndex];
+          const ActiveIcon = activeItem.icon;
+          return (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                color: 'white',
+                zIndex: 200,
+                padding: '24px 20px',
+                direction: 'rtl',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                overflowY: 'auto'
+              }}
+            >
+              <div style={{ maxWidth: '640px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 800, fontSize: '14px', opacity: 0.9 }}>פעל על פי פרוטוקול הכרה</span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveCardIndex(null)}
+                    style={{
+                      background: 'rgba(255,255,255,0.2)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '10px',
+                      padding: '8px 14px',
+                      fontWeight: 800,
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <X size={18} /> סגור
+                  </button>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.14)', borderRadius: '20px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <ActiveIcon size={34} color="white" />
+                  <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 900, lineHeight: 1.3 }}>{activeItem.t}</h2>
+                  <p style={{ margin: 0, fontSize: '18px', fontWeight: 600, lineHeight: 1.6 }}>{activeItem.d}</p>
+                </div>
+              </div>
+
+              <div style={{ maxWidth: '640px', width: '100%', margin: '24px auto 0' }}>
+                <button
+                  type="button"
+                  onClick={() => setActiveCardIndex(null)}
+                  style={{
+                    width: '100%',
+                    padding: '16px',
+                    background: 'white',
+                    color: '#1d4ed8',
+                    border: 'none',
+                    borderRadius: '14px',
+                    fontWeight: 900,
+                    fontSize: '17px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  חזרה למסך
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* קוביית התקרקעות חדשה, ממורכזת ומופרדת */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
