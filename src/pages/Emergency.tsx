@@ -596,7 +596,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
 
       <footer style={{ marginTop: '24px', padding: '24px', borderTop: '1px solid #e2e8f0', textAlign: 'center', background: 'white' }}>
         <p style={{ fontSize: '15px', fontWeight: 600, color: '#334155', fontStyle: 'italic', marginBottom: '16px', direction: 'rtl' }}>
-          "פוסט טראומה היא תווית שלא מבקשים, אבל הכרה היא תווית שכולנו ראויים לה."
+          "אוטיזם היא תווית שלא מבקשים, אבל הכרה היא תווית שכולנו ראויים לה."
         </p>
         <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           <span onClick={() => setLegalModalType('privacy')} style={{ cursor: 'pointer', textDecoration: 'underline' }}>מדיניות פרטיות</span>
