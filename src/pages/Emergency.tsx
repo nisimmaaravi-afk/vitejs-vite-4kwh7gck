@@ -309,7 +309,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
           <Shield color="#2563eb" size={22} />
           <span>Recognition Live <span style={{ color: '#2563eb' }}>חירום</span></span>
         </div>
-        <span style={{ background: '#fee2e2', color: '#dc2626', fontSize: '10px', fontWeight: 800, padding: '4px 10px', borderRadius: '20px', letterSpacing: '0.5px' }}>
+        <span style={{ background: '#fee2e2', color: '#dc2626', fontSize: '12px', fontWeight: 800, padding: '4px 10px', borderRadius: '20px', letterSpacing: '0.5px' }}>
           ● אני חווה רגע של מצוקה בבקשה עזרו לי לפי ההנחיות
         </span>
       </header>
