@@ -386,7 +386,7 @@ export default function Emergency({ tagId }: { tagId: string }) {
           </a>
         </div>
 
-        {/* 4 קוביות עליונות בגודל התואם לקוביות התחתונות עם מלל מוגדל פרופורציונלית */}
+        {/* 4 קוביות עליונות מוגדלות בגובה (פי 1.5) ובמלל בהתאם לנגישות לחיצה */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           <div style={{ fontWeight: 800, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: '#2563eb' }}>
             <Heart size={18} fill="#2563eb" color="#2563eb" />
@@ -398,12 +398,20 @@ export default function Emergency({ tagId }: { tagId: string }) {
               return (
                 <div
                   key={i}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setActiveTopCardIndex(prev => prev === i ? null : i)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setActiveTopCardIndex(prev => prev === i ? null : i);
+                    }
+                  }}
                   style={{
                     display: 'flex',
-                    gap: '10px',
-                    minHeight: '84px',
-                    padding: '14px 16px',
+                    gap: '12px',
+                    minHeight: '126px',
+                    padding: '16px 18px',
                     background: isSelected ? 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)' : '#f8fafc',
                     color: isSelected ? 'white' : '#0f172a',
                     borderRadius: '12px',
@@ -413,8 +421,8 @@ export default function Emergency({ tagId }: { tagId: string }) {
                     transition: 'all 0.2s'
                   }}
                 >
-                  <item.icon color={isSelected ? 'white' : '#3b82f6'} size={22} style={{ flexShrink: 0 }} />
-                  <p style={{ fontWeight: 800, fontSize: '15px', lineHeight: 1.3, color: isSelected ? 'white' : '#0f172a', margin: 0 }}>{item.label}</p>
+                  <item.icon color={isSelected ? 'white' : '#3b82f6'} size={28} style={{ flexShrink: 0 }} />
+                  <p style={{ fontWeight: 900, fontSize: '20px', lineHeight: 1.25, color: isSelected ? 'white' : '#0f172a', margin: 0 }}>{item.label}</p>
                 </div>
               );
             })}
